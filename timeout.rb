@@ -1,6 +1,5 @@
 require 'rubygems'
 require 'bud'
-require 'random'
 
 module TimeoutProto
   state do
