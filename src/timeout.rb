@@ -4,8 +4,8 @@ require 'bud'
 module TimeoutProto
   state do
     interface input, :interval, [] => [:minTimeout, :maxTimeout]
-    interface input, :snooze, [:ok]
-    interface output, :alarm, [:timeout]
+    interface input, :snooze, [:im_tired]
+    interface output, :alarm, [:wake_up]
   end
 end
 
@@ -17,11 +17,11 @@ module UniformlyDistributedTimeout
 
   state do
     periodic :timer, TIMER_INTERVAL
-    table :countdown, [] => [:timeRemaining] 
+    table :countdown, [] => [:timeRemaining]
   end
-  
+
   bloom do
-  
+
     # countdown contains the amount of time remaining till the alarm "wakes_up"
     # it is reset to a random timeout if snooze is recieved
     countdown <+- (timer * countdown * interval * snooze).combos do |t, c, i, s|
@@ -31,9 +31,9 @@ module UniformlyDistributedTimeout
           [entropy.rand(i.minTimeout..i.maxTimeout)]
         end
     end
-    
+
     # alarm sends out wake_up calls
     alarm <= countdown { |c| [:wake_up] if c.timeRemaining <= 0 }
-    
+
   end
 end
