@@ -11,8 +11,6 @@ module RequestVoteRPC
     interface input, :request_vote, [:term, :candidateId]
     interface output, :vote_response, [:host, :term, :voteGranted]
 
-    interface input, :update_term, [:term]
-
     channel :request_vote_chan, [:@dest, :from, :term, :candidateId]
     channel :vote_response_chan, [:@dest, :from, :term, :voteGranted]
 
