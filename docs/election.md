@@ -33,7 +33,7 @@ interface output, :outcome, [:term]
 RequestVoteRPC implements the request and response end of the RPC as outlined in RAFT. One call to RequestVoteRPC will send a RPC to all servers in StaticMembership as well as collect their responses
 
 ```ruby
-interface input, :request_vote, [:term, :candidateId]
+interface input, :request_vote, [:term]
 interface output, :vote_response, [:host, :term, :voteGranted]
 ```
 
