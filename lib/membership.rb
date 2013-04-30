@@ -24,7 +24,9 @@ module StaticMembership
   bloom do
     # add member to private_members, initializing term to 0
     private_members <= add_member { |m| [m.ident, m.host, 0] }
+    # updates term
     private_members <+- (private_members * update_term).pairs(:host => :host) { |p, m| [m.term] }
+    # remove member, unnecessary for StaticMembership
     private_members <- (remove_member * private_members).pairs(:ident => :ident)
     member <= private_members
   end
