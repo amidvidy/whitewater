@@ -7,11 +7,12 @@ require 'timeout'
 module RequestVoteRPC
   include StaticMembership
   state do
-    # candidateId is the candidate requesting the vote
-    interface input, :request_vote, [:term, :candidateId]
+
+    # removed candidateId because implementation does not make use of it
+    interface input, :request_vote, [:term]
     interface output, :vote_response, [:host, :term, :voteGranted]
 
-    channel :request_vote_chan, [:@dest, :from, :term, :candidateId]
+    channel :request_vote_chan, [:@dest, :from, :term]
     channel :vote_response_chan, [:@dest, :from, :term, :voteGranted]
 
     table :votes_casted, [:term]
@@ -47,7 +48,7 @@ module LeaderElection
   import RequestVoteRPC => :rv
   import VoteCounterImpl => :vc
   state do
-    interface input, :start_election, [:term, :candidateId]
+    interface input, :start_election, [:term]
 
     # returns term if candidate won election.
     interface output, :outcome, [:term]
