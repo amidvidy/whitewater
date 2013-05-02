@@ -1,39 +1,47 @@
 require 'rubygems'
 require 'bud'
 
+# The Timeout protocol.
 module TimeoutProto
   state do
-    interface input, :interval, [] => [:minTimeout, :maxTimeout]
-    interface input, :snooze, [:im_tired]
-    interface output, :alarm, [:wake_up]
+    # must be set once, at bootstrap time
+    interface input, :config, [] => [:min_timeout, :max_timeout]
+    # Resets the timeout. ID should be a unique value specified by the client,
+    # such as ip_port
+    interface input, :snooze, [:id]
+    # Signals that a timeout has been triggered.
+    interface output, :alarm, [:id]
   end
 end
 
 module UniformlyDistributedTimeout
   include TimeoutProto
 
+  # Internal clock will be triggered every 50ms
   TIMER_INTERVAL = 0.05
-  entropy = Random.new
 
   state do
     periodic :timer, TIMER_INTERVAL
-    table :countdown, [] => [:timeRemaining]
+    table :timer_state, [:id] => [:start_tm, :time_out]
+    table :conf, config.schema
   end
 
-  bloom do
+  bloom :timeouts do
 
-    # countdown contains the amount of time remaining till the alarm "wakes_up"
-    # it is reset to a random timeout if snooze is recieved
-    countdown <+- (timer * countdown * interval * snooze).combos do |t, c, i, s|
-        if snooze.ok == [nil]
-          [countdown.timeRemaining - TIMER_INTERVAL]
-        else
-          [entropy.rand(i.minTimeout..i.maxTimeout)]
-        end
+    conf <= config
+
+    # on snooze, set a new timeout
+    timer_state <+- (timer_state * timer * snooze * conf).combos(timer_state.id => snooze.id) do |ts, t, s, c|
+      [ts.id, t.value.to_f, Random.new.rand(c.min_timeout..c.max_timeout)]
     end
 
-    # alarm sends out wake_up calls
-    alarm <= countdown { |c| [:wake_up] if c.timeRemaining <= 0 }
+    temp :triggered <= (timer_state * timer).combos do |state, time|
+      if time.val.to_f - state.start_tm > state.time_out
+          [state.id, state.start_tm, state.time_out]
+      end
+    end
 
+    timer_state <- triggered
+    alarm <= triggered {|t| [t.id]}
   end
 end
