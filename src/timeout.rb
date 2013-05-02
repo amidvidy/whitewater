@@ -24,24 +24,31 @@ module UniformlyDistributedTimeout
     periodic :timer, TIMER_INTERVAL
     table :timer_state, [:id] => [:start_tm, :time_out]
     table :conf, config.schema
+
+    scratch :triggered, timer_state.schema
   end
 
-  bloom :timeouts do
-
+  bloom :config do
     conf <= config
+  end
 
-    # on snooze, set a new timeout
-    timer_state <+- (timer_state * timer * snooze * conf).combos(timer_state.id => snooze.id) do |ts, t, s, c|
-      [ts.id, t.value.to_f, Random.new.rand(c.min_timeout..c.max_timeout)]
-    end
-
-    temp :triggered <= (timer_state * timer).combos do |state, time|
+  bloom :alarm do
+    triggered <= (timer_state * timer).combos do |state, time|
       if time.val.to_f - state.start_tm > state.time_out
-          [state.id, state.start_tm, state.time_out]
+        [state.id, state.start_tm, state.time_out]
       end
     end
 
     timer_state <- triggered
     alarm <= triggered {|t| [t.id]}
+  end
+
+  bloom :snooze do
+    # on snooze, set a new timeout
+    # note, the proper bloom way of doing this is to store snoozes in a buffer so
+    # that we can use the periodic to set the time, but this leads to greater inaccuracy
+    timer_state <= (snooze * conf).combos do |s, c|
+      [s.id, Time.new.to_f, Random.new.rand(c.min_timeout..c.max_timeout)]
+    end
   end
 end
