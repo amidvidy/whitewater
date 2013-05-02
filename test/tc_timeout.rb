@@ -1,4 +1,3 @@
-require 'rubygems'
 require 'bud'
 require 'test/unit'
 require '../src/timeout'
@@ -13,7 +12,7 @@ class TestTimeout < Test::Unit::TestCase
     include UniformlyDistributedTimeout
 
     bootstrap do
-      interval <= [[MIN_TIMEOUT, MAX_TIMEOUT]]
+      config <= [[MIN_TIMEOUT, MAX_TIMEOUT]]
     end
   end
 
@@ -21,7 +20,7 @@ class TestTimeout < Test::Unit::TestCase
   def test_timeout
     timer = TimeoutBloom.new
     start_time = Time.new
-    timer.sync_callback(:snooze, [[:im_tired]], :alarm)
+    timer.sync_callback(:snooze, [["my_id"]], :alarm)
     stop_time = Time.new
     assert(stop_time - start_time >= MIN_TIMEOUT, "timeout was too short")
     assert(stop_time - start_time <= MAX_TIMEOUT, "timeout was too long")
