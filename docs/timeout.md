@@ -13,7 +13,7 @@ interface output, :alarm, [:id]
 
 ### *input*: config
 
-*Note: This collection must be inserted into once, and only once at bootstrap time.*
+*Note: This collection must be inserted into once, and only once, at bootstrap time.*
 
 - `min_timeout`: The minimum duration of a timeout.
 - `max_timeout`: The maximum duration of a timeout.
