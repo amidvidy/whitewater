@@ -11,7 +11,7 @@ module RaftServer
   state do
     interface input, :command,
     # leader keeps track of who leader is, address corresponds to member.host in StaticMembership
-    table :leader, [] => [:host]
+  table :leader, [] => [:host]
     # state is either :LEADER, :FOLLOWER, :CANDIDATE
     table :state, [] => [:status]
   end

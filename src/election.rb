@@ -15,22 +15,34 @@ module RequestVoteRPC
     channel :vote_response_chan, [:@dest, :from, :term, :voteGranted]
 
     table :votes_casted, [:term]
+
+    scratch :current_term_temp, [:term]
+    scratch :vote_response_temp, vote_response_chan.schema
   end
 
   bloom do
-    # plumb start_vote to all members via vote_chan
-    vote_chan <~ (member * request_vote).pairs do |m, s|
+    # plumb start_vote to all members via request_vote_chan
+    request_vote_chan <~ (member * request_vote).pairs do |m, s|
       [m.host, ip_port] + s.to_a
     end
 
     # vote for the candidate if have not voted in given term and myterm <= candidate term
-    temp :current_term_temp <= member { |m| [m.term] if m.host == ip_port }
-    temp :vote_response_temp <= (request_vote_chan * votes_casted * current_term_temp).outer do |vch, vca, ctt|
-      if votes_casted.term == [nil] and (tt.term <= vch.term)
-        [vch.from, vch.dest, m.term, true]
-      else
-        [vch.from, vch.dest, m.term, false]
-      end
+    current_term_temp <= member { |m| [m.term] if m.host == ip_port }
+    # stdio <~ current_term_temp.inspected
+    stdio <~ request_vote_chan.inspected
+    # vote_response_temp <= (request_vote_chan * votes_casted * current_term_temp).outer do |vch, vca, ctt|
+    #   if vca.term == [nil] and (tt.term <= vch.term)
+    #     [vch.from, vch.dest, m.term, true]
+    #   else
+    #     [vch.from, vch.dest, m.term, false]
+    #   end
+    # end
+    vote_response_temp <= (request_vote_chan * current_term_temp).pairs do |r, c|
+      # if votes_casted.term == [nil]
+      #   [r.from, r.dest, c.term, true]
+      # else
+        [r.from, r.dest, r.term, true]
+      # end
     end
 
     vote_response_chan <~ vote_response_temp
@@ -39,12 +51,12 @@ module RequestVoteRPC
 
     # output the result of the channel
     vote_response <= vote_response_chan {|vrc| [vrc.from, vrc.term, vrc.voteGranted]}
+    stdio <~ vote_response.inspected
   end
 end
 
 module LeaderElection
-  include StaticMembership
-  import RequestVoteRPC => :rv
+  include RequestVoteRPC
   import VoteCounterImpl => :vc
   state do
     interface input, :start_election, [:term]
@@ -54,10 +66,12 @@ module LeaderElection
 
   bloom do
     # plumb start_election to request vote
-    rv.request_vote <= start_election
+    # update_term <= [[ip_port, start_election.term]]
+    # stdio <~ update_term.inspected
+    request_vote <= start_election
     vc.start_vote <= start_election { |se| [se.term, (member.length / 2).floor + 1] }
 
-    vc.submit_ballot <= rv.vote_response do |vr|
+    vc.submit_ballot <= vote_response do |vr|
       if vr.voteGranted == true
         [vr.host, vr.term]
       end
