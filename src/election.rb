@@ -1,83 +1,67 @@
 require 'rubygems'
 require 'bud'
 require '../lib/votecounter'
-require '../lib/membership'
-require 'timeout'
 
-module RequestVoteRPC
-  include StaticMembership
+module LeaderElectionProto
   state do
-    # removed candidateId because implementation does not make use of it
-    interface input, :request_vote, [:term]
-    interface output, :vote_response, [:host, :term, :voteGranted]
-
-    channel :request_vote_chan, [:@dest, :from, :term]
-    channel :vote_response_chan, [:@dest, :from, :term, :voteGranted]
-
-    table :votes_casted, [:term]
-
-    scratch :current_term_temp, [:term]
-    scratch :vote_response_temp, vote_response_chan.schema
-  end
-
-  bloom do
-    # plumb start_vote to all members via request_vote_chan
-    request_vote_chan <~ (member * request_vote).pairs do |m, s|
-      [m.host, ip_port] + s.to_a
-    end
-
-    # vote for the candidate if have not voted in given term and myterm <= candidate term
-    current_term_temp <= member { |m| [m.term] if m.host == ip_port }
-    # stdio <~ current_term_temp.inspected
-    stdio <~ request_vote_chan.inspected
-    # vote_response_temp <= (request_vote_chan * votes_casted * current_term_temp).outer do |vch, vca, ctt|
-    #   if vca.term == [nil] and (tt.term <= vch.term)
-    #     [vch.from, vch.dest, m.term, true]
-    #   else
-    #     [vch.from, vch.dest, m.term, false]
-    #   end
-    # end
-    vote_response_temp <= (request_vote_chan * current_term_temp).pairs do |r, c|
-      # if votes_casted.term == [nil]
-      #   [r.from, r.dest, c.term, true]
-      # else
-        [r.from, r.dest, r.term, true]
-      # end
-    end
-
-    vote_response_chan <~ vote_response_temp
-    # update table with new vote
-    votes_casted <= vote_response_temp {|vrt| [vrt.term]}
-
-    # output the result of the channel
-    vote_response <= vote_response_chan {|vrc| [vrc.from, vrc.term, vrc.voteGranted]}
-    stdio <~ vote_response.inspected
+    interface input, :start_election, [:candidate_id, :term, :last_log_index, :last_log_term]
+    interface output, :election_outcome, [:term]
   end
 end
 
-module LeaderElection
-  include RequestVoteRPC
+module LeaderElectionImpl
+  include LeaderElectionProto
+  # This will be included in raft_server
+  import ServerState => :ss
   import VoteCounterImpl => :vc
+
   state do
-    interface input, :start_election, [:term]
-    # returns term ONLY if candidate won election.
-    interface output, :outcome, [:term]
+    # Channels to pipe requests and responses among the servers
+    channel :vote_request_chan, [:@dest, :candidate_id, :term, :last_log_index, :last_log_term]
+    channel :vote_response_chan, [:@candidate_id, :from, :term, :vote_granted]
+
+    scratch :vote_buffer, vote_response_chan.schema
   end
 
-  bloom do
-    # plumb start_election to request vote
-    # update_term <= [[ip_port, start_election.term]]
-    # stdio <~ update_term.inspected
-    request_vote <= start_election
-    vc.start_vote <= start_election { |se| [se.term, (member.length / 2).floor + 1] }
+  bloom :start_elections do
+    # When an election is started, we send a RequestVoteRPC out to each
+    # member of the cluster (including ourselves)
+    vote_request_chan <~ (start_election * ss.members).pairs do |se, m|
+      [m.host, ip_port, se.term, se.last_log_index, se.last_log_term]
+    end
+  end
 
-    vc.submit_ballot <= vote_response do |vr|
-      if vr.voteGranted == true
-        [vr.host, vr.term]
+  bloom :cast_vote do
+    # We cast a vote only if we have not voted for this term and
+    # the requester's term is at least the same as ours
+    vote_buffer <= (vote_request_chan * ss.max_term_voted * ss.current_term).combos do |req, maxterm, currterm|
+      if maxterm.term < currterm.term and currterm.term <= req.term
+        [req.candidate_id, ip_port, req.term, true]
+      else
+        [req.candidate_id, ip_port, currterm.term, false]
       end
     end
-
-    outcome <= vc.outcome
+    # Send back the vote response to the requestor
+    vote_response_chan <~ vote_buffer
+    # Update current term if it is higher, lattice logic takes
+    # care of the messy details here
+    ss.update_term <= vote_buffer {|req| [vote.term]}
+    # Update our last term voted
+    ss.update_max_term_voted <= vote_buffer {|vote| [vote.term]}
   end
 
+  bloom :count_votes do
+    # Starts a vote counter and tally up all the "yes" votes we get
+    vc.start_vote <= start_election {|se| [se.term, (ss.members.length / 2) + 1]}
+    # count up the votes that were granted
+    vc.submit_ballot <= vote_response_chan do |vr|
+        [vr.host, vr.term] if vr.vote_granted
+    end
+    # Update current term if it is higher, lattice logic takes
+    # care of the messy details here. If we actually receive a
+    # response with a higher term, we won't win the election anyways
+    ss.update_term <= vote_response_chan {|resp| [resp.term]}
+    # Send vote result alarm if we won, otherwise election_outcome will be empty
+    election_outcome <= vc.outcome
+  end
 end
