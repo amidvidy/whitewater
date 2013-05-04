@@ -5,13 +5,16 @@
 LeaderElection provides a high level interface to conduct elections, it uses the RequestVoteRPC behind the scenes to contact the other servers.
 
 ```ruby
-interface input, :start_election, [:term]
-interface output, :outcome, [:term]
+interface input, :start_election, [:candidate_id, :term, :last_log_index, :last_log_term]
+interface output, :election_outcome, [:term]
 ```
 
 ### *input*: start\_election
 
-- `term`: The current term of the Candidate requesting the election.
+- `candidate_id`: The ip_host of the requesting candidate
+- `term`: The current term of the candidate requesting the election.
+- `last_log_index`: not implemented, currently: `nil`
+- `last_log_term`: not implemented, currently: `nil`
 
 ### *output*: outcome
 
@@ -27,22 +30,3 @@ interface output, :outcome, [:term]
 -  Term does **not** get incremented by LeaderElection, the Raft Server using the LeaderElection module is responsible for that.
 
 - LeaderElection also does not implement timeouts. The Server is again responsible for that.
-
-## *module*: RequestVoteRPC
-
-RequestVoteRPC implements the request and response end of the RPC as outlined in RAFT. One call to RequestVoteRPC will send a RPC to all servers in StaticMembership as well as collect their responses
-
-```ruby
-interface input, :request_vote, [:term]
-interface output, :vote_response, [:host, :term, :voteGranted]
-```
-
-### *input*: request\_vote
-
-- `term`: The current term of the Candidate requesting the election.
-
-### *output*: vote\_response
-
-- `host`: The `ip_port` of the voter casting the vote.
-- `term`: The current term of the voter casting the vote.
-- `voteGranted`: a boolean `true` or `false` indicating if the requesting Candidate is voted for or not.
