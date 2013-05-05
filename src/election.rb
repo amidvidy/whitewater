@@ -1,6 +1,7 @@
 require 'rubygems'
 require 'bud'
 require '../lib/votecounter'
+require '../src/serverstate'
 
 module LeaderElectionProto
   state do
@@ -12,7 +13,7 @@ end
 module LeaderElectionImpl
   include LeaderElectionProto
   # This will be included in raft_server
-  import ServerState => :ss
+  import ServerStateImpl => :ss
   import VoteCounterImpl => :vc
 
   state do
@@ -26,6 +27,7 @@ module LeaderElectionImpl
   bloom :start_elections do
     # When an election is started, we send a RequestVoteRPC out to each
     # member of the cluster (including ourselves)
+
     vote_request_chan <~ (start_election * ss.members).pairs do |se, m|
       [m.host, ip_port, se.term, se.last_log_index, se.last_log_term]
     end
@@ -35,7 +37,7 @@ module LeaderElectionImpl
     # We cast a vote only if we have not voted for this term and
     # the requester's term is at least the same as ours
     vote_buffer <= (vote_request_chan * ss.max_term_voted * ss.current_term).combos do |req, maxterm, currterm|
-      if maxterm.term < currterm.term and currterm.term <= req.term
+      if maxterm.max_term < currterm.term and currterm.term <= req.term
         [req.candidate_id, ip_port, req.term, true]
       else
         [req.candidate_id, ip_port, currterm.term, false]
@@ -45,7 +47,7 @@ module LeaderElectionImpl
     vote_response_chan <~ vote_buffer
     # Update current term if it is higher, lattice logic takes
     # care of the messy details here
-    ss.update_term <= vote_buffer {|req| [vote.term]}
+    ss.update_term <= vote_buffer {|vote| [vote.term]}
     # Update our last term voted
     ss.update_max_term_voted <= vote_buffer {|vote| [vote.term]}
   end
@@ -55,7 +57,7 @@ module LeaderElectionImpl
     vc.start_vote <= start_election {|se| [se.term, (ss.members.length / 2) + 1]}
     # count up the votes that were granted
     vc.submit_ballot <= vote_response_chan do |vr|
-        [vr.host, vr.term] if vr.vote_granted
+      [vr.from, vr.term] if vr.vote_granted
     end
     # Update current term if it is higher, lattice logic takes
     # care of the messy details here. If we actually receive a

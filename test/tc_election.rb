@@ -16,7 +16,7 @@ class TestElection < Test::Unit::TestCase
         ['127.0.0.1:54324'],
         ['127.0.0.1:54325']
       ]
-
+      ss.update_term <= [[0]]
     end
   end
 
