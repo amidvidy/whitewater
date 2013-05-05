@@ -1,7 +1,7 @@
 require 'rubygems'
 require 'bud'
 
-module ServerStateProtocol
+module ServerStateProto
 	state	do
 		interface input, :update_term, [:term]
 		interface input, :update_max_term_voted, [:max_term]
@@ -15,7 +15,7 @@ module ServerStateProtocol
 end
 
 module ServerStateImpl
-	include ServerStateProtocol
+	include ServerStateProto
 
 	state do
 		lmax :term
@@ -25,8 +25,8 @@ module ServerStateImpl
 	end
 
 	bloom :update do
-		term <= update_term { |t| Bud::MaxLattice.new(t[0]) }
-		term_voted <= update_max_term_voted { |t| Bud::MaxLattice.new(t[0]) }
+		term <= update_term { |t| Bud::MaxLattice.new(t.term) }
+		term_voted <= update_max_term_voted { |t| Bud::MaxLattice.new(t.max_term) }
 		role <+- update_role { |r| r if [[:LEADER], [:FOLLOWER], [:CANDIDATE]].include? r }
 	end
 
