@@ -47,9 +47,9 @@ module LeaderElectionImpl
     vote_response_chan <~ vote_buffer
     # Update current term if it is higher, lattice logic takes
     # care of the messy details here
-    ss.update_term <= vote_buffer {|vote| [vote.term]}
+    ss.update_term <+ vote_buffer {|vote| [vote.term]}
     # Update our last term voted
-    ss.update_max_term_voted <= vote_buffer {|vote| [vote.term]}
+    ss.update_max_term_voted <+ vote_buffer {|vote| [vote.term]}
   end
 
   bloom :count_votes do
