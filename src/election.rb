@@ -37,7 +37,7 @@ module LeaderElectionImpl
     # We cast a vote only if we have not voted for this term and
     # the requester's term is at least the same as ours
     vote_buffer <= (vote_request_chan * ss.max_term_voted * ss.current_term).combos do |req, maxterm, currterm|
-      if maxterm.max_term < currterm.term and currterm.term <= req.term
+      if maxterm.max_term < req.term and currterm.term <= req.term
         [req.candidate_id, ip_port, req.term, true]
       else
         [req.candidate_id, ip_port, currterm.term, false]
