@@ -23,4 +23,10 @@ class TestCalculator < Test::Unit::TestCase
     assert_equal [[10]], @calc.sync_callback(:execute_command, [[["SET", 10]]], :execute_command_resp)
   end
 
+  def test_ordered
+    assert_equal [[10]], @calc.sync_callback(:execute_command, [[["ADD", 10]]], :execute_command_resp)
+    assert_equal [[5]],  @calc.sync_callback(:execute_command, [[["DIV", 2]]], :execute_command_resp)
+    assert_equal [[2]],  @calc.sync_callback(:execute_command, [[["SUB", 3]]], :execute_command_resp)
+  end
+
 end
