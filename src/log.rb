@@ -2,25 +2,18 @@ require 'rubygems'
 require 'bud'
 require '../lib/votecounter'
 require '../src/serverstate'
+require '../src/statemachine'
 
-# Abstract single-site state machine protocol.
-module StateMachineProto
-  state do
-    interface input, :execute_command, [:command]
-    interface output, :execute_command_resp, [:command, :new_state]
-  end
-end
-
-# Replicated state machine protocol.
-module ReplicatedStateMachineProto
+# Quite the mouthful, eh?
+module StronglyConsistentDistributedStateMachineProto
   state do
     interface input, :execute_command, [:reqid] => [:command]
-    interface input, :execute_command_resp [:reqid] => [:command, :new_state]
+    interface output, :execute_command_resp [:reqid] => [:command, :new_state]
   end
 end
 
 module RaftLog
-  include ReplicatedStateMachineProto
+  include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
   import VoteCounterImpl => :vc
   import StateMachineProto => :state_machine
@@ -30,10 +23,8 @@ module RaftLog
     channel :append_entries_request_chan, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     channel :append_entries_response_chan, [:@dest, :candidate_id, :term, :success]
 
-    table :log, [:term, :index] => [:command]
+    table :log, [:term, :index, :command]
     table :next_indices, [:client_id] => [:next_index]
-
-    lmax :max_index_comitted
 
     # scratches for master logic
     scratch :prev_index_temp, [:client_id] => [:term, :index]
@@ -42,7 +33,11 @@ module RaftLog
     scratch :untracked_members, [:client_id]
 
     # scratches for follower logic
-    scratch :new_entries, [:leader_id, :command, :prev_term, :prev_index, :success]
+    scratch :append_entry_success, [:leader_id, :command, :prev_term, :prev_index, :commit_index, :success]
+  end
+
+  bloom :update_state_machine do
+
   end
 
   # When a leader first comes into power it initializes all
@@ -101,7 +96,7 @@ module RaftLog
     # update term if the requestors term is higher than ours, lattice logic handles the details
     update_term <+ append_entries_request_chan {|req| [req.term]}
 
-    new_entries <~ (log * append_entries_request_chan * current_term)
+    append_entry_success <~ (log * append_entries_request_chan * current_term)
       .outer(:index => :pre_log_index, :term => :prev_log_term) do |entry, append_req, currterm|
       # if we get an appendEntriesRPC from a false leader, ignore it
       unless append_req.term <= currterm.term
@@ -114,9 +109,16 @@ module RaftLog
     end
 
     # delete any conflicting entries
-    log <- (log * new_entries).pairs do |entry, ne|
-      entry if entry.index > ne.prev_index or entry.term > ne.prev_term
+    log <- (log * append_entry_success).pairs do |entry, as|
+      entry if entry.index > as.prev_index or entry.term > as.prev_term
     end
 
+    # add new entry
+    log <+ (append_entry_success * current_term).pairs do |as, currterm|
+      [currterm.term, as.prev_index + 1, as.command]
+    end
+
+    # update the max entry that we can commit
+    max_index_comitted <= append_entry_success {|as| [as.commit_index]}
   end
 end
