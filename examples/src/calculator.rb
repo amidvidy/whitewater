@@ -30,16 +30,20 @@ module Calculator
 
   bloom do
     new_mem <= (execute_command * mem).pairs do |c, m|
-      if c.command[0] == "SET"
+      case c.command[0]
+      when "SET"
         [c.command[1].to_f]
-      elsif c.command[0] = "ADD"
+      when "ADD"
         [m.value + c.command[1].to_f]
-      elsif c.command[0] = "SUB"
+      when "SUB"
         [m.value - c.command[1].to_f]
-      elsif c.command[0] = "MUL"
+      when "MUL"
         [m.value * c.command[1].to_f]
-      elsif c.command[0] = "DIV"
+      when "DIV"
         [m.value / c.command[1].to_f]
+      else
+        # ignore
+        [m.value]
       end
     end
     mem <+- new_mem
