@@ -1,9 +1,9 @@
 require 'rubygems'
 require 'bud'
 require 'test/unit'
-require '../src/statemachine'
+require '../src/orderedstatemachine'
 
-class StateMachine
+class OrderedStateMachineBloom
 	include Bud
 	include OrderedStateMachine
 end
@@ -11,7 +11,7 @@ end
 class TestOrderedStateMachine < Test::Unit::TestCase
 
 	def setup
-		@osm = OrderedStateMachine.new
+		@osm = OrderedStateMachineBloom.new
 		@osm.run_bg
 	end
 

@@ -1,6 +1,6 @@
 require 'rubygems'
 require 'bud'
-require '../../lib/statemachine'
+require_relative '../../lib/statemachine'
 
 # Very basic example of a state machine implementation.
 # Implements a simple calculator.
