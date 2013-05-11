@@ -1,19 +1,13 @@
 require 'rubygems'
 require 'bud'
-
-# Abstract single-site state machine protocol.
-# Implement this protocol with your application-specific state machine
-module StateMachineProto
-  state do
-    interface input, :execute_command, [:command]
-    interface output, :execute_command_resp, [:new_state]
-  end
-end
+require '../examples/src/calculator'
+require '../lib/statemachine'
 
 # Wraps the StateMachineProto to handle unordered commands
-# replace the StateMachineProto import with your application-specific state machine
+# replace the Calculator import with your application-specific state machine
 module OrderedStateMachine
-  import StateMachineProto => :sm
+
+  import Calculator => :sm
 
   state do
     interface input, :execute_command, [:command_index] => [:command]
