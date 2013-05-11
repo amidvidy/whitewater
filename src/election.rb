@@ -13,7 +13,7 @@ end
 module LeaderElectionImpl
   include LeaderElectionProto
   # This will be included in raft_server
-  import ServerStateImpl => :ss
+  include ServerStateImpl
   import VoteCounterImpl => :vc
 
   state do
@@ -28,7 +28,7 @@ module LeaderElectionImpl
     # When an election is started, we send a RequestVoteRPC out to each
     # member of the cluster (including ourselves)
 
-    vote_request_chan <~ (start_election * ss.members).pairs do |se, m|
+    vote_request_chan <~ (start_election * members).pairs do |se, m|
       [m.host, ip_port, se.term, se.last_log_index, se.last_log_term]
     end
   end
@@ -36,7 +36,7 @@ module LeaderElectionImpl
   bloom :cast_vote do
     # We cast a vote only if we have not voted for this term and
     # the requester's term is at least the same as ours
-    vote_buffer <= (vote_request_chan * ss.max_term_voted * ss.current_term).combos do |req, maxterm, currterm|
+    vote_buffer <= (vote_request_chan * max_term_voted * current_term).combos do |req, maxterm, currterm|
       if maxterm.max_term < req.term and currterm.term <= req.term
         [req.candidate_id, ip_port, req.term, true]
       else
@@ -47,14 +47,14 @@ module LeaderElectionImpl
     vote_response_chan <~ vote_buffer
     # Update current term if it is higher, lattice logic takes
     # care of the messy details here
-    ss.update_term <+ vote_buffer {|vote| [vote.term]}
+    update_term <+ vote_buffer {|vote| [vote.term]}
     # Update our last term voted
-    ss.update_max_term_voted <+ vote_buffer {|vote| [vote.term]}
+    update_max_term_voted <+ vote_buffer {|vote| [vote.term]}
   end
 
   bloom :count_votes do
     # Starts a vote counter and tally up all the "yes" votes we get
-    vc.start_vote <= start_election {|se| [se.term, (ss.members.length / 2) + 1]}
+    vc.start_vote <= start_election {|se| [se.term, (members.length / 2) + 1]}
     # count up the votes that were granted
     vc.submit_ballot <= vote_response_chan do |vr|
       [vr.from, vr.term] if vr.vote_granted
@@ -62,7 +62,7 @@ module LeaderElectionImpl
     # Update current term if it is higher, lattice logic takes
     # care of the messy details here. If we actually receive a
     # response with a higher term, we won't win the election anyways
-    ss.update_term <= vote_response_chan {|resp| [resp.term]}
+    update_term <= vote_response_chan {|resp| [resp.term]}
     # Send vote result alarm if we won, otherwise election_outcome will be empty
     election_outcome <= vc.outcome
   end
