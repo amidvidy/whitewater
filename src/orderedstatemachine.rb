@@ -22,8 +22,8 @@ module OrderedStateMachine
     scratch :finished, [:command_index, :command, :new_state]
   end
 
-  bloom :stdio_stuff do
 =begin
+  bloom :stdio_stuff do
     stdio <~ uncommitted {|u| [["@#{budtime}: uncommitted: #{u}"]] }
     stdio <~ currently_executing {|c| [["@#{budtime}: currently_executing: #{c}"]] }
     stdio <~ [["@#{budtime}: currently_executing_length: #{currently_executing.length}"]]
@@ -31,10 +31,9 @@ module OrderedStateMachine
     stdio <~ [["@#{budtime}: current_index_acked: #{current_index_acked.reveal}"]]
 
     stdio <~ ready {|r| [["@#{budtime}: ready: #{r}"]] }
-=end
     stdio <~ finished {|f| [["@#{budtime}: finished: #{f}"]] }
   end
-
+=end
 
   bootstrap do
     current_index <= Bud::MaxLattice.new(0)
@@ -47,7 +46,6 @@ module OrderedStateMachine
   end
 
   bloom :execute_ordered do
-
     # A command is ready if its index is the current index to execute
     ready <= uncommitted do |u|
       u if current_index.reveal == u.command_index and current_index.reveal == current_index_acked.reveal
@@ -65,7 +63,6 @@ module OrderedStateMachine
   end
 
   bloom :finish_commands do
-
     # Place responses from StateMachine into finished scratch
     finished <= (currently_executing * sm.execute_command_resp).pairs do |ce, ecr|
       [ce.command_index, ce.command, ecr.new_state]
