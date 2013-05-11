@@ -21,6 +21,10 @@ class TestServerState < Test::Unit::TestCase
 		@state.run_bg
 	end
 
+	def teardown
+		@state.stop true
+	end
+
 	def test_sanity
 		assert_equal [[-1]], @state.delta(:current_term)
 		assert_equal [[-1]], @state.delta(:max_term_voted)
