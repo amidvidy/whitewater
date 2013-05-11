@@ -16,35 +16,41 @@ module OrderedStateMachine
     table :uncommitted, execute_command.schema
     table :currently_executing, [] => [:command_index, :command]
     lmax :current_index
+    lmax :current_index_acked
 
     scratch :ready, execute_command.schema
     scratch :finished, [:command_index, :command, :new_state]
   end
 
   bloom :stdio_stuff do
+=begin
     stdio <~ uncommitted {|u| [["@#{budtime}: uncommitted: #{u}"]] }
     stdio <~ currently_executing {|c| [["@#{budtime}: currently_executing: #{c}"]] }
     stdio <~ [["@#{budtime}: currently_executing_length: #{currently_executing.length}"]]
     stdio <~ [["@#{budtime}: current_index: #{current_index.reveal}"]]
+    stdio <~ [["@#{budtime}: current_index_acked: #{current_index_acked.reveal}"]]
+
     stdio <~ ready {|r| [["@#{budtime}: ready: #{r}"]] }
+=end
     stdio <~ finished {|f| [["@#{budtime}: finished: #{f}"]] }
   end
 
+
   bootstrap do
     current_index <= Bud::MaxLattice.new(0)
+    current_index_acked <= Bud::MaxLattice.new(0)
   end
 
   bloom :enqueue_commands do
     # Buffer all commands into uncommitted
-    uncommitted <= execute_command 
+    uncommitted <= execute_command
   end
 
   bloom :execute_ordered do
-    
+
     # A command is ready if its index is the current index to execute
     ready <= uncommitted do |u|
-      stdio <~ [["current_index: #{current_index.reveal} command_index: #{u.command_index} currently_executing: #{currently_executing.exists?}"]]
-      u if current_index.reveal == u.command_index and not currently_executing.exists?
+      u if current_index.reveal == u.command_index and current_index.reveal == current_index_acked.reveal
     end
 
     # Update the current index
@@ -59,11 +65,13 @@ module OrderedStateMachine
   end
 
   bloom :finish_commands do
-    
+
     # Place responses from StateMachine into finished scratch
     finished <= (currently_executing * sm.execute_command_resp).pairs do |ce, ecr|
       [ce.command_index, ce.command, ecr.new_state]
     end
+
+    current_index_acked <+ finished {|f| Bud::MaxLattice.new(f.command_index + 1)}
 
     # Delete finished commands from currently_executing
     currently_executing <- finished {|f| [f.command_index, f.command]}
