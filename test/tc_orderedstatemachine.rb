@@ -11,7 +11,7 @@ end
 class TestOrderedStateMachine < Test::Unit::TestCase
 
 	def setup
-		@osm = OrderedStateMachineBloom.new(:port => 1234, :trace => true)
+		@osm = OrderedStateMachineBloom.new
 		@osm.run_bg
 	end
 
@@ -20,8 +20,9 @@ class TestOrderedStateMachine < Test::Unit::TestCase
 	end
 
   def test_sanity
-    resp = @osm.sync_callback :execute_command, [[0, ["SET", 10]]], :execute_command_resp
-    assert_equal [[0, 10]], resp
+    @osm.execute_command <+ [[0, ["SET", 10]]]
+    5.times { @osm.tick }
+    assert_equal [[0, 10]], @osm.delta(:execute_command_resp)
   end
 
 end
