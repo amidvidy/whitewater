@@ -1,20 +1,83 @@
 require 'rubygems'
 require 'bud'
+require '../lib/votecounter'
+require '../src/serverstate'
 
-module LogProto
+# Abstract single-site state machine protocol.
+module StateMachineProto
   state do
-    interface input, :add_entry, [:command]
+    interface input, :execute_command, [:command]
+    interface output, :execute_command_resp, [:command, :new_state]
   end
 end
 
-module ReplicatedLog
-  include LogProto
+# Replicated state machine protocol.
+module ReplicatedStateMachineProto
+  state do
+    interface input, :execute_command, [:reqid] => [:command]
+    interface input, :execute_command_resp [:reqid] => [:command, :new_state]
+  end
+end
+
+module RaftLog
+  include ReplicatedStateMachineProto
+  include ServerStateImpl
+  import VoteCounterImpl => :vc
+  import StateMachineProto => :state_machine
+
 
   state do
-    channel :append_entries_request, [:@dest, :leader_id, :prev_log_index, :prev_log_term, :entries, :commitIndex]
-    channel :append_entries_response, [:@dest, :candidate_id, :term, :success]
+    channel :append_entries_request_chan, [:@dest, :leader_id, :prev_log_index, :prev_log_term, :entries, :commit_index]
+    channel :append_entries_response_chan, [:@dest, :candidate_id, :term, :success]
 
-    table :log, [:term, :index, :command]
+    table :log, [:term, :index] => [:command]
+    table :next_indices, [:client_id] => [:next_index]
+
+    lmax :max_index_comitted
+
+    scratch :highest_log_entry, log.schema
+    scratch :tracked_members, [:client_id]
+    scratch :untracked_members, [:client_id]
+  end
+
+  # When a leader first comes into power it initializes all
+  # next_index values to the index just after the last one in its log
+  bloom :bootstrap_leader do
+    # get the highest log entry in the log
+    highest_log_entry <= log.argmax([:term, :index, :command], :index)
+
+    # figure out which members have uninitialized next_index entries
+    tracked_members <= next_indices {|ni| [ni.index]}
+    untracked_members <= current_members.notin(tracked_members, :host => :client_id)
+
+    # leader initializes next_index values
+    next_indices <= (current_role * untracked_members * highest_log_entry).combos do |cr, um, hle|
+      [um.client_id, hle.index] if cr.role == [:LEADER]
+    end
+  end
+
+  # Clear out next index values if you are not a leader so they get reinitialized if you
+  # become leader again
+  bloom :not_leader do
+    # please let this work
+    next_indices <- (next_indices * current_role).pairs do |ni, cr|
+      ni if cr.role != [:LEADER]
+    end
+  end
+
+  bloom :handle_client do
+    # issues AppendEntries RPCs in parallel to each of the other servers
+    append_entries_request_chan <~ (execute_command * members * highest_log_entry * max_index_commited).combos do |ec, m, hle, mic|
+      [m.host, ip_port, hle.index, hle.term, ec.command, mic]
+    end
+
+    # the leader appends the command to its log as a new entry
+    log <+ (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
+      [ct.term, hle.index + 1, ec.command]
+    end
+
+    # start counting acks
+    vc.start_vote <= execute_command {|ec| [ec.reqid, (members.length / 2) + 1]}
   end
 
 end
