@@ -48,7 +48,6 @@ module OrderedStateMachine
   end
 
   bloom :finish_commands do
-    
     # Place responses from StateMachine into finished scratch
     finished <= (currently_executing * sm.execute_command_resp).pairs do |ce, ecr|
       [ce.command_index, ce.command, ecr.new_state]

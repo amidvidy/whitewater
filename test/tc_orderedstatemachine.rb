@@ -21,8 +21,8 @@ class TestOrderedStateMachine < Test::Unit::TestCase
 
   def test_sanity
     @osm.execute_command <+ [[0, ["SET", 10]]]
-    5.times { @osm.tick }
-    @osm.register_callback(:execute_command_resp) {|ecr| assert_equal [[0, 10]], ecr}
+    @osm.tick
+    assert_equal [[0, 10]], @osm.delta(:execute_command_resp)
   end
 
 end
