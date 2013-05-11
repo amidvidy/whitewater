@@ -27,6 +27,7 @@ class TestElection < Test::Unit::TestCase
 
   # Two servers start_election for the same term
   def test_multiple_candidates
+    puts "\nstart test_multiple_candidates"
     # this should timeout because @s2 will recieve no response from election_outcome
     acks1 = @s1.sync_callback(:start_election, [["#{$IP}:54321", 1, nil, nil]], :election_outcome)
     assert_equal([[1]], acks1)
@@ -97,7 +98,7 @@ class TestElection < Test::Unit::TestCase
     # run 2 elections synchronously, first @s1 is leader
     # then @s2 is elected afterwards
     
-    puts "\nStarting test_sequential_elections" 
+    puts "\nstarting test_sequential_elections" 
 
     acks = @s1.sync_callback(:start_election, [["#{$IP}:54321", 1, nil, nil]], :election_outcome)
     assert_equal([[1]], acks)
