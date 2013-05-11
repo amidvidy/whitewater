@@ -14,7 +14,6 @@ class TestElection < Test::Unit::TestCase
   end
 
   def test_sanity
-    puts "\nstart test_sanity"
     acks = @s1.sync_callback(:start_election, [["#{$IP}:54321", 1, nil, nil]], :election_outcome)
     assert_equal([[1]], acks)
 
@@ -27,7 +26,6 @@ class TestElection < Test::Unit::TestCase
 
   # Two servers start_election for the same term
   def test_multiple_candidates
-    puts "\nstart test_multiple_candidates"
     # this should timeout because @s2 will recieve no response from election_outcome
     acks1 = @s1.sync_callback(:start_election, [["#{$IP}:54321", 1, nil, nil]], :election_outcome)
     assert_equal([[1]], acks1)
@@ -46,7 +44,6 @@ class TestElection < Test::Unit::TestCase
   end
   
   def test_concurrent_candidates
-    puts "\nstart test_concurrent_candidates" 
 
     @s1.sync_do do 
       @s1.start_election <+ [["#{$IP}:54321", 1, nil, nil], ["#{$IP}:54322", 1, nil, nil]]
@@ -55,14 +52,14 @@ class TestElection < Test::Unit::TestCase
     begin
       SoftTimeout.timeout(2) { @s1.delta(:election_outcome) }
     rescue SoftTimeout::Error
-      puts "hello1"
       begin
         SoftTimeout.timeout(2) { @s2.delta(:election_outcome) }
       rescue SoftTimeout::Error
-        flunk "Both Servers Lost the Election"
+        assert false, "Both Servers Lost the Election"
       end
 
-      pass
+      puts "s2 wins"
+      assert true
       @s1.stop
       @s2.stop
       @s3.stop
@@ -75,7 +72,8 @@ class TestElection < Test::Unit::TestCase
     begin
       SoftTimeout.timeout(2) { @s2.delta(:election_outcome) }
     rescue SoftTimeout::Error
-      pass
+      puts "s1 wins"
+      assert true
       @s1.stop
       @s2.stop
       @s3.stop
@@ -84,7 +82,7 @@ class TestElection < Test::Unit::TestCase
       return
     end
 
-    flunk "Both Servers Won"
+    assert false, "Both Servers Won"
 
     @s1.stop
     @s2.stop
@@ -98,7 +96,6 @@ class TestElection < Test::Unit::TestCase
     # run 2 elections synchronously, first @s1 is leader
     # then @s2 is elected afterwards
     
-    puts "\nstarting test_sequential_elections" 
 
     acks = @s1.sync_callback(:start_election, [["#{$IP}:54321", 1, nil, nil]], :election_outcome)
     assert_equal([[1]], acks)
