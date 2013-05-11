@@ -1,4 +1,4 @@
-# statemachine.rb
+# orderedstatemachine.rb
 
 ## *module*: OrderedStateMachine
 
