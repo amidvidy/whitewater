@@ -1,6 +1,6 @@
 require 'rubygems'
 require 'bud'
-require '../src/statemachine'
+require '../../src/statemachine'
 
 # Very basic example of a state machine implementation.
 # Implements a simple calculator.
@@ -43,6 +43,6 @@ module Calculator
       end
     end
     mem <+- new_mem
-    execute_command_resp <+ new_mem
+    execute_command_resp <= new_mem
   end
 end
