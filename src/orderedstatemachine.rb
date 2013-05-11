@@ -22,7 +22,7 @@ module OrderedStateMachine
   end
 
   bootstrap do
-    current_index <= Bud::MaxLattice(0)
+    current_index <= Bud::MaxLattice.new(0)
   end
 
   bloom :enqueue_commands do
@@ -32,15 +32,15 @@ module OrderedStateMachine
 
   bloom :execute_ordered do
     # A command is ready if its index is the current index to execute
-    ready <= (uncomitted * current_index).pairs do |u, ci|
-      u if ci.reveal == u.command_index and currently_executing.length == 0
+    ready <= uncomitted do |u|
+      u if current_index.reveal == u.command_index and currently_executing.length == 0
     end
 
     # Update the current index
-    current_index <+ ready {|r| Bud::MaxLattice.new(r.index + 1)}
+    current_index <+ ready {|r| Bud::MaxLattice.new(r.command_index + 1)}
 
     # Execute the ready commands in the StateMachine
-    sm.execute_command <+ ready  
+    sm.execute_command <+ ready {|r| [r.command]}
 
     # Remove now commited entries from uncomitted
     uncomitted <- ready

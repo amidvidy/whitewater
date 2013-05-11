@@ -11,7 +11,7 @@ end
 class TestOrderedStateMachine < Test::Unit::TestCase
 
 	def setup
-		@osm = OrderedStateMachineBloom.new
+		@osm = OrderedStateMachineBloom.new(:port => 1234, :trace => true)
 		@osm.run_bg
 	end
 
