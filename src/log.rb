@@ -42,7 +42,7 @@ module RaftLog
     scratch :untracked_members, [:client_id]
 
     # scratches for follower logic
-    scratch :new_entries, [:leader_id, :command, :term, :index, :success]
+    scratch :new_entries, [:leader_id, :command, :prev_term, :prev_index, :success]
   end
 
   # When a leader first comes into power it initializes all
@@ -112,5 +112,11 @@ module RaftLog
         end
       end
     end
+
+    # delete any conflicting entries
+    log <- (log * new_entries).pairs do |entry, ne|
+      entry if entry.index > ne.prev_index or entry.term > ne.prev_term
+    end
+
   end
 end
