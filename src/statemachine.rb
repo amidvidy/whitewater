@@ -24,7 +24,7 @@ module OrderedStateMachine
     lmax :current_index
 
     scratch :ready, execute_command.schema
-    scratch :finished, execute_command.schema
+    scratch :finished, [:command_index, :command, :new_state]
   end
 
   bootstrap do
@@ -55,9 +55,16 @@ module OrderedStateMachine
 
   bloom :finish_commands do
     
-    finished <= sm.execute_command_resp)
-    currently_executing <- finished
+    # Place responses from StateMachine into finished scratch
+    finished <= (currently_executing * sm.execute_command_resp).pairs do |ce, ecr|
+      [ce.command_index, ce.command, ecr.new_state]
+    end
 
+    # Delete finished commands from currently_executing
+    currently_executing <- finished {|f| [f.command_index, f.command]}
+
+    # Once StateMachine executes, respond with the new state
+    execute_command_resp <= finished {|f| [f.command_index, f.new_state]}
   end
 
 end
