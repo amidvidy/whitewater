@@ -31,6 +31,7 @@ class TestOrderedStateMachine < Test::Unit::TestCase
                              [2, ["SUB", 10]], 
                              [3, ["DIV", -5]], 
                              [4, ["ADD", 7]]]
+    100.times {@osm.tick}
     @osm.tick
     assert_equal [[0, 10]], @osm.delta(:execute_command_resp)
     @osm.tick
