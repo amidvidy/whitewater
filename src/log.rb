@@ -2,7 +2,7 @@ require 'rubygems'
 require 'bud'
 require '../lib/votecounter'
 require '../src/serverstate'
-require '../src/statemachine'
+require '../src/orderedstatemachine'
 
 # Quite the mouthful, eh?
 module StronglyConsistentDistributedStateMachineProto
@@ -16,15 +16,20 @@ module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
   import VoteCounterImpl => :vc
-  import StateMachineProto => :state_machine
+  import OrderedStateMachine => :sm
 
 
   state do
     channel :append_entries_request_chan, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     channel :append_entries_response_chan, [:@dest, :candidate_id, :term, :success]
 
-    table :log, [:term, :index, :command]
+    table :log, [:term, :index] => [:command]
+    table :committed_entries, log.schema
     table :next_indices, [:client_id] => [:next_index]
+
+    # the index of the highest log entry committed so far
+    lmax :max_index_committed
+    scratch :to_commit, log.schema
 
     # scratches for master logic
     scratch :prev_index_temp, [:client_id] => [:term, :index]
@@ -34,6 +39,18 @@ module RaftLog
 
     # scratches for follower logic
     scratch :append_entry_success, [:leader_id, :command, :prev_term, :prev_index, :commit_index, :success]
+  end
+
+  # when log entries are committed, they can be applied to the state machine
+  bloom :commit_to_state_machine do
+    # find entries ready to commit that have not yet been committed
+    to_commit <= (committed_entries * log).outer(:term => :term, :index => :index) do |ce, l|
+      l if ce == [nil, nil, nil] and l.index <= max_index_comitted.reveal
+    end
+
+    # commit them
+    committed_entries <+ to_commit
+    sm.execute_command <= to_commit {|tc| [tc.index, tc.command]}
   end
 
   # LEADER RULES
@@ -74,7 +91,7 @@ module RaftLog
       [ni.client_id, entry.term, entry.index] if entry.index == ni.index - 1
     end
 
-    append_entries_request_chan <~ (prev_index_temp * next_indices * log * max_index_comitted * current_term)
+    append_entries_request_chan <~ (prev_index_temp * next_indices * log * max_index_committed * current_term)
       .combos(next_indices.next_index => log.index, prev_index_temp.client_id => next_indices.client_id) \
     do |prev, ni, entry, mic, currterm|
       [prev.client_id, ip_host, currterm.term, prev.index, prev.term, entry.command, mic]
@@ -119,11 +136,12 @@ module RaftLog
     end
 
     # update the max entry that we can commit
-    max_index_comitted <= append_entry_success {|as| [as.commit_index]}
+    max_index_committed <= append_entry_success {|as| [as.commit_index]}
 
     # send response back to leader
     append_entries_response_chan <~ (append_entry_success * current_term).pairs do |as, currterm|
       [as.leader_id, ip_port, currterm.term, as.success]
     end
   end
+
 end
