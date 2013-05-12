@@ -115,7 +115,10 @@ module RaftLog
     end
 
     # count up the successful votes so we can commit
-    # this is going to be more annoying than I thought
+    vc.submit_ballot <= (append_entries_response_chan * next_indices).pairs(:client_id => :client_id) do |aer, ni|
+      # clients response term will be the same term as ours at the time the vote was sent
+      [ni.client_id, [ni.next_index, aer.term]] if aer.success
+    end
   end
 
 
