@@ -105,7 +105,7 @@ module RaftLog
       if aer.success
         [ni.client_id, ni.next_index + 1]
       else
-        [ni.client_id, ni.next_index + 1]
+        [ni.client_id, ni.next_index - 1]
       end
     end
 
