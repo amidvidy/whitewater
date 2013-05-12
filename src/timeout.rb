@@ -17,8 +17,8 @@ end
 module UniformlyDistributedTimeout
   include TimeoutProto
 
-  # Internal clock will be triggered every 50ms
-  TIMER_INTERVAL = 0.05
+  # Internal clock will be triggered every 10ms
+  TIMER_INTERVAL = 0.01
 
   state do
     periodic :timer, TIMER_INTERVAL
@@ -48,7 +48,9 @@ module UniformlyDistributedTimeout
     # note, the proper bloom way of doing this is to store snoozes in a buffer so
     # that we can use the periodic to set the time, but this leads to greater inaccuracy
     timer_state <= (snooze * conf).combos do |s, c|
-      [s.id, Time.new.to_f, Random.new.rand(c.min_timeout.to_f..c.max_timeout.to_f)]
+      # ensure that timeouts are within the range that we can actually trigger
+      timeout = Random.new.rand((c.min_timeout.to_f + TIMER_INTERVAL)..(c.max_timeout.to_f - TIMER_INTERVAL))
+      [s.id, Time.new.to_f, timeout]
     end
   end
 end
