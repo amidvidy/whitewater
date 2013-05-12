@@ -1,6 +1,7 @@
 require 'rubygems'
 require 'bud'
 require '../lib/votecounter'
+require '../lib/reliable'
 require '../src/serverstate'
 require '../src/orderedstatemachine'
 
@@ -15,16 +16,18 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
+  import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
   import OrderedStateMachine => :sm
 
-
   state do
-    channel :append_entries_request_chan, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
-    channel :append_entries_response_chan, [:@dest, :client_id, :term, :success]
+    # these were previously channels, but now reliable delivery handles that
+    # so that we don't need to implement retry logic
+    scratch :append_entries_request, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
+    scratch :append_entries_response_chan, [:@dest, :client_id, :term, :success]
 
     # the log
-    table :log, [:term, :index] => [:command]
+    table :log, [:term, :index] => [:entry]
     # entries to the log that have been committed
     table :committed_entries, [:term, :index] => []
 
@@ -44,7 +47,7 @@ module RaftLog
     scratch :untracked_members, [:client_id]
 
     # scratches for follower logic
-    scratch :append_entry_success, [:leader_id, :command, :prev_term, :prev_index, :commit_index, :success]
+    scratch :append_entry_success, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
   end
 
   # when log entries are committed, they can be applied to the state machine
@@ -83,7 +86,7 @@ module RaftLog
   bloom :handle_client_request do
     # the leader appends the command to its log as a new entry
     new_entries <= (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
-      [ct.term, hle.index + 1, ec.command]
+      [ct.term, hle.index + 1, {:reqid => ec.reqid, :command => ec.command}]
     end
 
     # add new entries to log
@@ -95,13 +98,19 @@ module RaftLog
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
   bloom :start_append_entries do
-    append_entries_request_chan <~ (next_indices * log * log * current_term).combos \
-    do |ni, entry, prev_entry, currterm|
-      if prev_entry.index == ni.index - 1 and entry.index == ni.index
-      [ni.client_id, ip_host, currterm.term, prev_entry.index, prev_entry.term, entry.command, max_index_committed]
+    rd.pipe_in <~ (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
+      if prev_entry.index == ni.index - 1 and cur_entry.index == ni.index
+        # payload is the actual AppendEntriesRPC
+        [ni.client_id, ip_port, cur_entry[:reqid], {
+           :term => currterm.term,
+           :leader_id => ip_port, # still unused
+           :prev_log_index => prev_entry.index,
+           :prev_log_term => prev_entry.term,
+           :command => cur_entry.centry,
+           :commit_index => max_index_committed
+         }]
       end
     end
-  end
 
   bloom :finish_append_entries do
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
