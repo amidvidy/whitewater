@@ -95,8 +95,12 @@ module RaftLog
     do |ni, entry, prev_entry, currterm|
       if prev_entry.index == ni.index - 1 and entry.index == ni.index
       [ni.client_id, ip_host, currterm.term, prev_entry.index, prev_entry.term, entry.command, max_index_committed]
+      end
     end
   end
+
+
+
 
   # FOLLOWER RULES
 
