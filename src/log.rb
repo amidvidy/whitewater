@@ -156,7 +156,7 @@ module RaftLog
   end
 
   bloom :respond_to_client do
-    finished_commands <= (active_commands, sm.execute_command_resp).pairs(:log_index => :reqid) do |ac, ecr|
+    finished_commands <= (active_commands * sm.execute_command_resp).pairs(:log_index => :reqid) do |ac, ecr|
       [ac.reqid, ecr.reqid, ac.command, ecr.new_state]
     end
     # remove finished commands from active_commands
@@ -180,7 +180,7 @@ module RaftLog
     # update term if the requestors term is higher than ours, lattice logic handles the details
     update_term <+ rd.pipe_out {|req| [req.payload[:term]]}
     # these are the RPCs that are not from a deposed leader (term < current_term)
-    append_entry_current <= rd.pipe_out * current_term).pairs |message, currterm| do
+    append_entry_current <= (rd.pipe_out * current_term).pairs do |message, currterm|
       unless message.payload[:term] < currterm.term
         [message.payload[:term],
          message.payload[:leader_id],
@@ -219,7 +219,7 @@ module RaftLog
     # send response back to leader
     rd.pipe_in <~ (append_entry_success * current_term).pairs do |as, currterm|
       [as.leader_id, ip_port, as.entry[:reqid], {
-         :term => currterm.term
+         :term => currterm.term,
          :success => as.success
        }]
     end
