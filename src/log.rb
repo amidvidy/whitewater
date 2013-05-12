@@ -30,6 +30,8 @@ module RaftLog
 
     # the index of the highest log entry committed so far
     lmax :max_index_committed
+
+    scratch :new_entries, log.schema
     # entries ready to be committed on this tick
     scratch :to_commit, log.schema
 
@@ -63,7 +65,7 @@ module RaftLog
   # next_index values to the index just after the last one in its log
   bloom :bootstrap_leader do
     # get the highest log entry in the log
-    highest_log_entry <= log.argmax([:term, :index, :command], :index)
+    highest_log_entry <= log.argmax([], :index)
 
     # figure out which members have uninitialized next_index entries
     tracked_members <= next_indices {|ni| [ni.client_id]}
@@ -80,12 +82,15 @@ module RaftLog
 
   bloom :handle_client_request do
     # the leader appends the command to its log as a new entry
-    log <+ (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
+    new_entries <= (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
       [ct.term, hle.index + 1, ec.command]
     end
 
+    # add new entries to log
+    log <+ new_entries
+
     # start counting acks for this command
-    vc.start_vote <= execute_command {|ec| [ec.reqid, (members.length / 2) + 1]}
+    vc.start_vote <= new_entries {|ne| [[ne.term, ne.index], (members.length / 2) + 1]}
   end
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
@@ -110,6 +115,7 @@ module RaftLog
     end
 
     # count up the successful votes so we can commit
+    # this is going to be more annoying than I thought
   end
 
 
