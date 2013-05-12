@@ -36,9 +36,7 @@ module RaftLog
     scratch :append_entry_success, [:leader_id, :command, :prev_term, :prev_index, :commit_index, :success]
   end
 
-  bloom :update_state_machine do
-
-  end
+  # LEADER RULES
 
   # When a leader first comes into power it initializes all
   # next_index values to the index just after the last one in its log
@@ -56,15 +54,6 @@ module RaftLog
     # leader initializes next_index values
     next_indices <= (current_role * untracked_members * highest_log_entry).combos do |cr, um, hle|
       [um.client_id, hle.index] if cr.role == [:LEADER]
-    end
-  end
-
-  # Clear out next index values if you are not a leader so they get reinitialized if you
-  # become leader again
-  bloom :not_leader do
-    # please let this work
-    next_indices <- (next_indices * current_role).pairs do |ni, cr|
-      ni if cr.role != [:LEADER]
     end
   end
 
@@ -89,6 +78,17 @@ module RaftLog
       .combos(next_indices.next_index => log.index, prev_index_temp.client_id => next_indices.client_id) \
     do |prev, ni, entry, mic, currterm|
       [prev.client_id, ip_host, currterm.term, prev.index, prev.term, entry.command, mic]
+    end
+  end
+
+  # FOLLOWER RULES
+
+  # Clear out next index values if you are not a leader so they get reinitialized if you
+  # become leader again
+  bloom :leader_stepdown do
+    # please let this work
+    next_indices <- (next_indices * current_role).pairs do |ni, cr|
+      ni if cr.role != [:LEADER]
     end
   end
 
@@ -120,5 +120,10 @@ module RaftLog
 
     # update the max entry that we can commit
     max_index_comitted <= append_entry_success {|as| [as.commit_index]}
+
+    # send response back to leader
+    append_entries_response_chan <~ (append_entry_success * current_term).pairs do |as, currterm|
+      [as.leader_id, ip_port, currterm.term, as.success]
+    end
   end
 end
