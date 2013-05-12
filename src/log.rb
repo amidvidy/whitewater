@@ -101,7 +101,7 @@ module RaftLog
 
   # Clear out next index values if you are not a leader so they get reinitialized if you
   # become leader again
-  bloom :leader_stepdown do
+  bloom :not_leader do
     # please let this work
     next_indices <- (next_indices * current_role).pairs do |ni, cr|
       ni if cr.role != [:LEADER]
