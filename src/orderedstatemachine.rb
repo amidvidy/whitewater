@@ -22,19 +22,6 @@ module OrderedStateMachine
     scratch :finished, [:command_index, :command, :new_state]
   end
 
-=begin
-  bloom :stdio_stuff do
-    stdio <~ uncommitted {|u| [["@#{budtime}: uncommitted: #{u}"]] }
-    stdio <~ currently_executing {|c| [["@#{budtime}: currently_executing: #{c}"]] }
-    stdio <~ [["@#{budtime}: currently_executing_length: #{currently_executing.length}"]]
-    stdio <~ [["@#{budtime}: current_index: #{current_index.reveal}"]]
-    stdio <~ [["@#{budtime}: current_index_acked: #{current_index_acked.reveal}"]]
-
-    stdio <~ ready {|r| [["@#{budtime}: ready: #{r}"]] }
-    stdio <~ finished {|f| [["@#{budtime}: finished: #{f}"]] }
-  end
-=end
-
   bootstrap do
     current_index <= Bud::MaxLattice.new(0)
     current_index_acked <= Bud::MaxLattice.new(0)
@@ -76,5 +63,16 @@ module OrderedStateMachine
     # Once StateMachine executes, respond with the new state
     execute_command_resp <= finished {|f| [f.command_index, f.new_state]}
   end
+end
 
+module OrderedStateMachineLogger
+  bloom :print_to_stdio do
+    stdio <~ uncommitted {|u| [["@#{budtime}: uncommitted: #{u}"]] }
+    stdio <~ currently_executing {|c| [["@#{budtime}: currently_executing: #{c}"]] }
+    stdio <~ [["@#{budtime}: currently_executing_length: #{currently_executing.length}"]]
+    stdio <~ [["@#{budtime}: current_index: #{current_index.reveal}"]]
+    stdio <~ [["@#{budtime}: current_index_acked: #{current_index_acked.reveal}"]]
+    stdio <~ ready {|r| [["@#{budtime}: ready: #{r}"]] }
+    stdio <~ finished {|f| [["@#{budtime}: finished: #{f}"]] }
+    end
 end
