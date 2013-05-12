@@ -21,7 +21,7 @@ module RaftLog
 
   state do
     channel :append_entries_request_chan, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
-    channel :append_entries_response_chan, [:@dest, :candidate_id, :term, :success]
+    channel :append_entries_response_chan, [:@dest, :client_id, :term, :success]
 
     # the log
     table :log, [:term, :index] => [:command]
@@ -99,7 +99,17 @@ module RaftLog
     end
   end
 
-
+  bloom :finish_append_entries do
+    # if a follower successfully committed this log entry, send it the next one, otherwise, send it the
+    # previous one
+    next_indices <+- (append_entries_response_chan * next_indices).pairs(:client_id => :client_id) do |aer, ni|
+      if aer.success
+        [ni.client_id, ni.next_index + 1]
+      else
+        [ni.client_id, ni.next_index + 1]
+      end
+    end
+  end
 
 
   # FOLLOWER RULES
