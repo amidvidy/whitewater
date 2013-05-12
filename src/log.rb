@@ -30,11 +30,11 @@ module RaftLog
 
     # the index of the highest log entry committed so far
     lmax :max_index_committed
+    # entries ready to be committed on this tick
     scratch :to_commit, log.schema
 
+    # the next log index to send to each follower
     table :next_indices, [:client_id] => [:next_index]
-
-
 
     # scratches for master logic
     scratch :prev_index_temp, [:client_id] => [:term, :index]
@@ -96,10 +96,10 @@ module RaftLog
       [ni.client_id, entry.term, entry.index] if entry.index == ni.index - 1
     end
 
-    append_entries_request_chan <~ (prev_index_temp * next_indices * log * max_index_committed * current_term)
+    append_entries_request_chan <~ (prev_index_temp * next_indices * log * current_term)
       .combos(next_indices.next_index => log.index, prev_index_temp.client_id => next_indices.client_id) \
-    do |prev, ni, entry, mic, currterm|
-      [prev.client_id, ip_host, currterm.term, prev.index, prev.term, entry.command, mic]
+    do |prev, ni, entry, currterm|
+      [prev.client_id, ip_host, currterm.term, prev.index, prev.term, entry.command, max_index_committed]
     end
   end
 
