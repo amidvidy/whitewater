@@ -18,7 +18,7 @@ class TestTimeout < Test::Unit::TestCase
 
   # basic sanity test
   def test_timeout
-    10.times do |i|
+    10.times do
       start_time = Time.new
       @timer.sync_callback :snooze, [["my_id"]], :alarm
       stop_time = Time.new
