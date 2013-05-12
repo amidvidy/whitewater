@@ -106,7 +106,7 @@ module RaftLog
            :leader_id => ip_port, # still unused
            :prev_log_index => prev_entry.index,
            :prev_log_term => prev_entry.term,
-           :command => cur_entry.centry,
+           :command => cur_entry.entry,
            :commit_index => max_index_committed
          }]
       end
