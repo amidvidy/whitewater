@@ -24,7 +24,7 @@ module RaftLog
     # these were previously channels, but now reliable delivery handles that
     # so that we don't need to implement retry logic
     scratch :append_entries_request, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
-    scratch :append_entries_response_chan, [:@dest, :client_id, :term, :success]
+    scratch :append_entries_response, [:@dest, :client_id, :term, :success]
 
     # the log
     table :log, [:term, :index] => [:entry]
@@ -47,6 +47,7 @@ module RaftLog
     scratch :untracked_members, [:client_id]
 
     # scratches for follower logic
+    scratch append_entry_current, [:leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     scratch :append_entry_success, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
   end
 
@@ -116,6 +117,7 @@ module RaftLog
          }]
       end
     end
+  end
 
   bloom :finish_append_entries do
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
@@ -149,19 +151,28 @@ module RaftLog
 
   bloom :handle_append_entries do
     # update term if the requestors term is higher than ours, lattice logic handles the details
-    update_term <+ append_entries_request_chan {|req| [req.term]}
+    update_term <+ rd.pipe_out {|req| [req.payload[:term]]}
+    # these are the RPCs that are not from a deposed leader (term < current_term)
+    append_entry_current <= rd.pipe_out * current_term).pairs |message, currterm| do
+      unless message.payload[:term] < currterm.term
+        [message.payload[:term],
+         message.payload[:leader_id],
+         message.payload[:term],
+         message.payload[:prev_log_index],
+         message.payload[:entry],
+         message.payload[:commit_index]]
+      end
+    end
 
-    append_entry_success <~ (log * append_entries_request_chan * current_term)
-      .outer(:index => :pre_log_index, :term => :prev_log_term) do |entry, append_req, currterm|
+    append_entry_success <= (log * append_entry_current)
+      .outer(:index => :pre_log_index, :term => :prev_log_term) do |entry, append_req|
       # if we get an appendEntriesRPC from a false leader, ignore it
-      unless append_req.term <= currterm.term
-        if entry != [nil, nil, nil]
-          # if we have a matching previous entry, we can append this log entry
-          [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, true]
-        else
-          # we don't have a matching previous entry, leader will try again with an earlier entry
-          [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, false]
-        end
+      if entry != [nil, nil, nil]
+        # if we have a matching previous entry, we can append this log entry
+        [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, true]
+      else
+        # we don't have a matching previous entry, leader will try again with an earlier entry
+        [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, false]
       end
     end
 
@@ -179,8 +190,11 @@ module RaftLog
     max_index_committed <= append_entry_success {|as| [as.commit_index]}
 
     # send response back to leader
-    append_entries_response_chan <~ (append_entry_success * current_term).pairs do |as, currterm|
-      [as.leader_id, ip_port, currterm.term, as.success]
+    rd.pipe_in <~ (append_entry_success * current_term).pairs do |as, currterm|
+      [as.leader_id, ip_port, as.entry[:reqid], {
+         :term => currterm.term
+         :success => as.success
+       }]
     end
   end
 
