@@ -37,7 +37,6 @@ module RaftLog
     table :next_indices, [:client_id] => [:next_index]
 
     # scratches for master logic
-    scratch :prev_index_temp, [:client_id] => [:term, :index]
     scratch :highest_log_entry, log.schema
     scratch :tracked_members, [:client_id]
     scratch :untracked_members, [:client_id]
@@ -91,15 +90,11 @@ module RaftLog
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
   bloom :start_append_entries do
-    # get the term of the previous log entry to send for each client
-    prev_index_temp <= (log * next_indices).pairs do |entry, ni|
-      [ni.client_id, entry.term, entry.index] if entry.index == ni.index - 1
-    end
-
-    append_entries_request_chan <~ (prev_index_temp * next_indices * log * current_term)
+    append_entries_request_chan <~ (next_indices * log * log * current_term)
       .combos(next_indices.next_index => log.index, prev_index_temp.client_id => next_indices.client_id) \
-    do |prev, ni, entry, currterm|
-      [prev.client_id, ip_host, currterm.term, prev.index, prev.term, entry.command, max_index_committed]
+    do |ni, entry, prev_entry, currterm|
+      if prev_entry.index == ni.index - 1 and entry.index == ni.index
+      [ni.client_id, ip_host, currterm.term, prev_entry.index, prev_entry.term, entry.command, max_index_committed]
     end
   end
 
