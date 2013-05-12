@@ -86,7 +86,10 @@ module RaftLog
   bloom :handle_client_request do
     # the leader appends the command to its log as a new entry
     new_entries <= (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
-      [ct.term, hle.index + 1, {:reqid => ec.reqid, :command => ec.command}]
+      [ct.term, hle.index + 1, {
+         :reqid => ec.reqid,
+         :command => ec.command
+       }]
     end
 
     # add new entries to log
@@ -98,6 +101,8 @@ module RaftLog
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
   bloom :start_append_entries do
+    # this is extremely inefficient (must compute the cross product of all log entries
+    # but I'm not sure there is a better way to do this in Bloom
     rd.pipe_in <~ (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.index - 1 and cur_entry.index == ni.index
         # payload is the actual AppendEntriesRPC
