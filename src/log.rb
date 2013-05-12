@@ -99,7 +99,7 @@ module RaftLog
   end
 
   bloom :finish_append_entries do
-    # if a follower successfully committed this log entry, send it the next one, otherwise, send it the
+    # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
     # previous one
     next_indices <+- (append_entries_response_chan * next_indices).pairs(:client_id => :client_id) do |aer, ni|
       if aer.success
