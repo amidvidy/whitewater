@@ -85,7 +85,8 @@ module RaftLog
     end
 
     # start counting acks for this command
-    vc.start_vote <= execute_command {|ec| [ec.reqid, (members.length / 2) + 1]}
+    vc.start_vote <= execute_command {|ec| [[ec.reqid, :win], (members.length / 2) + 1]}
+    vc.start_vote <= execute_command {|ec| [[ec.reqid, :fail], (members.length / 2) + 1]}
   end
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
