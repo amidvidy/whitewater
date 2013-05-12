@@ -25,15 +25,12 @@ module RaftLog
   import OrderedStateMachine => :sm
 
   state do
-    # these were previously channels, but now reliable delivery handles that
-    # so that we don't need to implement retry logic
-    scratch :append_entries_request, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
-    scratch :append_entries_response, [:@dest, :client_id, :term, :success]
-
     # the log
     table :log, [:term, :index] => [:entry]
     # entries to the log that have been committed
     table :committed_entries, [:term, :index] => []
+
+    table :active_commands [:reqid] => [:log_index, :command]
 
     # the index of the highest log entry committed so far
     lmax :max_index_committed
@@ -49,9 +46,10 @@ module RaftLog
     scratch :highest_log_entry, log.schema
     scratch :tracked_members, [:client_id]
     scratch :untracked_members, [:client_id]
+    scratch :finished_commands, [:reqid] => [:log_index, :command, :new_state]
 
     # scratches for follower logic
-    scratch append_entry_current, [:leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
+    scratch :append_entry_current, [:leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     scratch :append_entry_success, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
   end
 
@@ -97,6 +95,8 @@ module RaftLog
        }]
     end
 
+    active_commands <= new_entries {|ne| [ne.entry[:reqid], ne.index, ne.entry[:command]]}
+
     # add new entries to log
     log <+ new_entries
 
@@ -141,6 +141,22 @@ module RaftLog
     end
   end
 
+  bloom :commit do
+    # a command can be committed when a majority of followers have appended it to their logs
+    max_index_comitted <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
+      command.index
+    end
+  end
+
+  bloom :respond_to_client do
+    finished_commands <= (active_commands, sm.execute_command_resp).pairs(:log_index => :reqid) do |ac, ecr|
+      [ac.reqid, ecr.reqid, ac.command, ecr.new_state]
+    end
+    # remove finished commands from active_commands
+    active_commands <- finished_commands {|ecr| [fc.reqid, fc.log_index, fc.command]}
+    # send response to client
+    execute_command_resp <= finished_commands {|fc| [fc.reqid, fc.command, fc.new_state]}
+  end
 
   # FOLLOWER RULES
 
@@ -201,5 +217,4 @@ module RaftLog
        }]
     end
   end
-
 end
