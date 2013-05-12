@@ -23,13 +23,18 @@ module RaftLog
     channel :append_entries_request_chan, [:@dest, :leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     channel :append_entries_response_chan, [:@dest, :candidate_id, :term, :success]
 
+    # the log
     table :log, [:term, :index] => [:command]
-    table :committed_entries, log.schema
-    table :next_indices, [:client_id] => [:next_index]
+    # entries to the log that have been committed
+    table :committed_entries, [:term, :index] => []
 
     # the index of the highest log entry committed so far
     lmax :max_index_committed
     scratch :to_commit, log.schema
+
+    table :next_indices, [:client_id] => [:next_index]
+
+
 
     # scratches for master logic
     scratch :prev_index_temp, [:client_id] => [:term, :index]
@@ -45,11 +50,11 @@ module RaftLog
   bloom :commit_to_state_machine do
     # find entries ready to commit that have not yet been committed
     to_commit <= (committed_entries * log).outer(:term => :term, :index => :index) do |ce, l|
-      l if ce == [nil, nil, nil] and l.index <= max_index_comitted.reveal
+      l if ce == [nil, nil] and l.index <= max_index_comitted.reveal
     end
 
     # commit them
-    committed_entries <+ to_commit
+    committed_entries <+ to_commit {|tc| [tc.term, tc.index]}
     sm.execute_command <= to_commit {|tc| [tc.index, tc.command]}
   end
 
