@@ -118,8 +118,10 @@ module RaftLog
       # if we get an appendEntriesRPC from a false leader, ignore it
       unless append_req.term <= currterm.term
         if entry != [nil, nil, nil]
+          # if we have a matching previous entry, we can append this log entry
           [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, true]
         else
+          # we don't have a matching previous entry, leader will try again with an earlier entry
           [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, false]
         end
       end
