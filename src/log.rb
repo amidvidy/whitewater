@@ -13,6 +13,10 @@ module StronglyConsistentDistributedStateMachineProto
   end
 end
 
+# TODO:
+#   - automatically send heartbeats
+#   - handle server status changes
+
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
