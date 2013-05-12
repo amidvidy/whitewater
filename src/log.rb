@@ -90,8 +90,7 @@ module RaftLog
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
   bloom :start_append_entries do
-    append_entries_request_chan <~ (next_indices * log * log * current_term)
-      .combos(next_indices.next_index => log.index, prev_index_temp.client_id => next_indices.client_id) \
+    append_entries_request_chan <~ (next_indices * log * log * current_term).combos \
     do |ni, entry, prev_entry, currterm|
       if prev_entry.index == ni.index - 1 and entry.index == ni.index
       [ni.client_id, ip_host, currterm.term, prev_entry.index, prev_entry.term, entry.command, max_index_committed]
