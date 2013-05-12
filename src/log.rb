@@ -52,7 +52,7 @@ module RaftLog
   end
 
   # when log entries are committed, they can be applied to the state machine
-  bloom :commit_to_state_machine do
+  bloom :apply_committed_to_state_machine do
     # find entries ready to commit that have not yet been committed
     to_commit <= (committed_entries * log).outer(:term => :term, :index => :index) do |ce, l|
       l if ce == [nil, nil] and l.index <= max_index_comitted.reveal
@@ -60,7 +60,7 @@ module RaftLog
 
     # commit them
     committed_entries <+ to_commit {|tc| [tc.term, tc.index]}
-    sm.execute_command <= to_commit {|tc| [tc.index, tc.command]}
+    sm.execute_command <= to_commit {|tc| [tc.index, tc.entry[:command]]}
   end
 
   # LEADER RULES
@@ -97,7 +97,7 @@ module RaftLog
     log <+ new_entries
 
     # start counting acks for this command
-    vc.start_vote <= new_entries {|ne| [[ne.term, ne.index], (members.length / 2) + 1]}
+    vc.start_vote <= new_entries {|ne| [[ne.entry[:reqid]], (members.length / 2) + 1]}
   end
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
@@ -122,8 +122,8 @@ module RaftLog
   bloom :finish_append_entries do
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
     # previous one
-    next_indices <+- (append_entries_response_chan * next_indices).pairs(:client_id => :client_id) do |aer, ni|
-      if aer.success
+    next_indices <+- (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
+      if aer.payload[:success]
         [ni.client_id, ni.next_index + 1]
       else
         [ni.client_id, ni.next_index - 1]
@@ -131,9 +131,9 @@ module RaftLog
     end
 
     # count up the successful votes so we can commit
-    vc.submit_ballot <= (append_entries_response_chan * next_indices).pairs(:client_id => :client_id) do |aer, ni|
-      # clients response term will be the same term as ours at the time the vote was sent
-      [ni.client_id, [ni.next_index, aer.term]] if aer.success
+    vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:client_id => :client_id) do |aer, ni|
+      # aer.ident is the reqid
+      [ni.client_id, aer.ident] if aer.payload[:success]
     end
   end
 
