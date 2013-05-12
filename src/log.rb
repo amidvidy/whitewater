@@ -53,6 +53,11 @@ module RaftLog
     scratch :append_entry_success, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
   end
 
+  bootstrap do
+    # log needs dummy entry
+    log <= [[-1, -1, nil]]
+  end
+
   # when log entries are committed, they can be applied to the state machine
   bloom :apply_committed_to_state_machine do
     # find entries ready to commit that have not yet been committed
@@ -82,7 +87,9 @@ module RaftLog
 
     # leader initializes next_index values
     next_indices <= (current_role * untracked_members * highest_log_entry).combos do |cr, um, hle|
-      [um.client_id, hle.index] if cr.role == [:LEADER]
+      if hle.index >= 0
+        [um.client_id, hle.index] if cr.role == [:LEADER]
+      end
     end
   end
 

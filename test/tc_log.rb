@@ -11,6 +11,13 @@ class TestLog < Test::Unit::TestCase
     @replicas = $PORTS.map {|p| Log.new(:port => p)}
     @replicas.map(&:run_bg)
     @s1, @s2, @s3, @s4, @s5 = @replicas
+
+    @s1.update_role <= [:LEADER]
+
+    @s2.update_role <= [:FOLLOWER]
+    @s3.update_role <= [:FOLLOWER]
+    @s4.update_role <= [:FOLLOWER]
+    @s5.update_role <= [:FOLLOWER]
   end
 
   def teardown
@@ -19,6 +26,10 @@ class TestLog < Test::Unit::TestCase
     @s3.stop
     @s4.stop
     @s5.stop true
+  end
+
+  def test_sanity
+    assert_equal [[0, ["SET", 10], 10]], @s1.execute_command, [[0, ["SET", 10]]], :execute_command_resp
   end
 end
 
