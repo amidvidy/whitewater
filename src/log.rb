@@ -162,6 +162,7 @@ module RaftLog
     # count up the successful votes so we can commit
     vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
+      puts "PRINTING IN SUBMIT BALLOT #{aer}"
       [ni.client_id, aer.ident] if aer.payload["success"]
     end
   end
@@ -169,7 +170,8 @@ module RaftLog
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
     max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
-      command.index
+      puts "AT #{__LINE__} AND #{command.index}"
+      Bud::MaxLattice.new(command.index)
     end
   end
 
@@ -196,7 +198,10 @@ module RaftLog
 
   bloom :handle_append_entries do
     # update term if the requestors term is higher than ours, lattice logic handles the details
-    update_term <+ rd.pipe_out {|req| [req.payload[:term]]}
+    update_term <+ rd.pipe_out do |req| 
+      puts "UPDATE TERM #{req}"
+      [req.payload["term"]]
+    end
     # these are the RPCs that are not from a deposed leader (term < current_term)
 
     append_entry_valid <= (rd.pipe_out * current_term).pairs do |message, currterm|
@@ -237,7 +242,10 @@ module RaftLog
     end
 
     # update the max entry that we can commit
-    max_index_committed <= append_entry_success {|as| as.commit_index}
+    max_index_committed <= append_entry_success do |as|
+      puts "AT #{__LINE__} AND #{as.commit_index}"
+      Bud::MaxLattice.new(as.commit_index)
+    end
 
     # send response back to leader
     rd.pipe_in <= (append_entry_success * current_term).pairs do |as, currterm|
