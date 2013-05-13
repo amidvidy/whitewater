@@ -17,6 +17,8 @@ end
 module ServerStateImpl
   include ServerStateProto
 
+  ROLES = [[:LEADER], [:FOLLOWER], [:CANDIDATE]]
+
   state do
     lmax :term
     lmax :term_voted
@@ -25,9 +27,9 @@ module ServerStateImpl
   end
 
   bloom :update do
-    term <= update_term { |t| Bud::MaxLattice.new(t.term) }
-    term_voted <= update_max_term_voted { |t| Bud::MaxLattice.new(t.max_term) }
-    role <+- update_role { |r| r if [[:LEADER], [:FOLLOWER], [:CANDIDATE]].include? r }
+    term <= update_term { |t| Bud::MaxLattice.new t.term }
+    term_voted <= update_max_term_voted { |t| Bud::MaxLattice.new t.max_term }
+    role <+- update_role { |r| r if ServerStateImpl::ROLES.include? r }
   end
 
   bloom :output do
