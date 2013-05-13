@@ -67,7 +67,7 @@ module RaftLog
 
   bootstrap do
     # log needs dummy entry
-    log <= [[-1, -1, "wdeawdawdawdioj"]]
+    log <= [[-1, -1, nil]]
   end
 
   # when log entries are committed, they can be applied to the state machine
