@@ -42,7 +42,7 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  include RaftLogLogger
+  #include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc

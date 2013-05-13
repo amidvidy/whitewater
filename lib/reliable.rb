@@ -10,13 +10,13 @@ module ReliableDelivery
   state do
     table :buf, pipe_in.schema
     channel :ack, [:@src, :dst, :ident]
-    periodic :clock, 0.001
+    #periodic :clock, 0.001
   end
 
   bloom :remember do
     buf <+ pipe_in.notin(buf, :ident => :ident, :src => :src)
     #bed.pipe_in <= pipe_in
-    bed.pipe_in <= (buf * clock).lefts
+    bed.pipe_in <= buf
   end
 
   bloom :rcv do
