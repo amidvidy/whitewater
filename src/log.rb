@@ -85,7 +85,7 @@ module RaftLog
     # find entries ready to commit that have not yet been committed
     uncommitted <= log.notin(committed_entries, :term => :term, :index => :index)
     to_commit <= uncommitted do |u|
-      u if u.index <= max_index_committed.reveal and u.index >= 0
+      u if u.index <= max_index_committed.reveal && u.index >= 0
     end
 
     # commit them
@@ -108,12 +108,12 @@ module RaftLog
     temp :untracked <= current_members.notin(next_indices, :host => :client_id)
     untracked_members <= (untracked * current_role).pairs do |ut, curr_role|
       # someone is untracked if they are not this node and not currently tracked
-      ut if ut.host != ip_port and curr_role.role == :LEADER
+      ut if ut.host != ip_port && curr_role.role == :LEADER
     end
 
     # leader initializes next_index values
     next_indices <= (current_role * untracked_members * highest_log_entry).combos do |cr, um, hle|
-      [um.client_id, hle.index] if cr.role == :LEADER and hle.index >= 0
+      [um.client_id, hle.index] if cr.role == :LEADER && hle.index >= 0
     end
   end
 
@@ -140,7 +140,7 @@ module RaftLog
     # this is extremely inefficient (must compute the cross product of all log entries
     # but I'm not sure there is a better way to do this in Bloom
     rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
-      if prev_entry.index == ni.next_index - 1 and cur_entry.index == ni.next_index
+      if prev_entry.index == ni.next_index - 1 && cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
         [ni.client_id, ip_port, cur_entry.entry["reqid"], {
           "term" => currterm.term,
@@ -158,7 +158,6 @@ module RaftLog
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
     # previous one
     next_indices <+- (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
-      #puts "AJFHJKSEHLKRH SHIT SHIT SHIT #{aer} AND NEXT INDEX #{ni.next_index}"
       if aer.payload["log_index"] == ni.next_index
         if aer.payload["success"]
           [ni.client_id, ni.next_index + 1]
@@ -180,8 +179,7 @@ module RaftLog
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
     max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
-      #puts "THIS COMMAND IS BEING COMMITED #{command}"
-      Bud::MaxLattice.new(command.log_index)
+      Bud::MaxLattice.new command.log_index
     end
   end
 
@@ -214,8 +212,7 @@ module RaftLog
     # these are the RPCs that are not from a deposed leader (term < current_term)
 
     append_entry_valid <= (rd.pipe_out * current_term * current_role).combos do |message, currterm, curr_role|
-      unless message.payload["term"] < currterm.term or curr_role.role == :LEADER
-        #puts "SHITS PRINTING OUT #{message.payload} and #{ip_port} AND CURRENT ROLE: #{curr_role.role}"
+      unless message.payload["term"] < currterm.term || curr_role.role == :LEADER
         [
           message.payload["leader_id"],
           message.payload["term"],
@@ -243,7 +240,7 @@ module RaftLog
 
     # delete any conflicting entries
     log <- (log * append_entry_success).pairs do |entry, as|
-      entry if entry.index > as.prev_index or entry.term > as.prev_term
+      entry if entry.index > as.prev_index || entry.term > as.prev_term
     end
 
     # add new entry
