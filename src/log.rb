@@ -36,7 +36,7 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  include RaftLogLogger
+  #include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
@@ -139,7 +139,7 @@ module RaftLog
     rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.next_index - 1 && cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
-        [ni.client_id, ip_port, {"reqid"=>cur_entry.entry["reqid"], "nonce"=>budtime}, {
+        [ni.client_id, ip_port, cur_entry.entry["reqid"], {
           "term" => currterm.term,
           "leader_id" => ip_port, # still unused
           "prev_log_index" => prev_entry.index,
@@ -170,7 +170,8 @@ module RaftLog
     # count up the successful votes so we can commit
     vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
-      [ni.client_id, aer.ident["reqid"]] if aer.payload["success"]
+      puts "PRINTING OUT THE AER #{aer}"
+      [ni.client_id, aer.ident] if aer.payload["success"]
     end
   end
 
@@ -255,7 +256,7 @@ module RaftLog
 
     # send response back to leader
     rd.pipe_in <= (append_entry_buffer * current_term).pairs do |as, currterm|
-      [as.leader_id, ip_port, {"reqid"=>as.entry["reqid"], "nonce"=>budtime}, {
+      [as.leader_id, ip_port, as.entry["reqid"], {
         "term" => currterm.term,
         "success" => as.success,
         "log_index" => as.prev_index + 1
