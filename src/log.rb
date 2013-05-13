@@ -35,7 +35,7 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  #include RaftLogLogger
+  include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
@@ -169,7 +169,7 @@ module RaftLog
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
     max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
-      Bud::MaxLattice.new(command.index)
+      Bud::MaxLattice.new(command.log_index)
     end
   end
 
@@ -201,8 +201,9 @@ module RaftLog
     end
     # these are the RPCs that are not from a deposed leader (term < current_term)
 
-    append_entry_valid <= (rd.pipe_out * current_term).pairs do |message, currterm|
-      unless message.payload["term"] < currterm.term
+    append_entry_valid <= (rd.pipe_out * current_term * current_role).combos do |message, currterm, curr_role|
+      unless message.payload["term"] < currterm.term or curr_role.role == :LEADER
+        #puts "SHITS PRINTING OUT #{message.payload} and #{ip_port} AND CURRENT ROLE: #{curr_role.role}"
         [
           message.payload["leader_id"],
           message.payload["term"],
