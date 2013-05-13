@@ -22,12 +22,15 @@ module RaftLogLogger
   bloom :log_to_stdio do
     #stdio <~ current_role {|cr| ["server #{ip_port}-@#{budtime}: current_role #{cr}"]}
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
-    stdio <~ execute_command {|ec| [["server #{ip_port}-@#{budtime}: execute_command #{ec}"]]}
+    stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
     stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
     stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
-    stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
-    stdio <~ append_entry_success {|aec| [["server #{ip_port}-@#{budtime} append_entry_success: #{aec}"]]}
-    stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
+    stdio <~ to_commit {|tc| [["server #{ip_port}-@#{budtime}: to_commit #{tc}}"]]}
+    #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
+    #stdio <~ append_entry_success {|aec| [["server #{ip_port}-@#{budtime} append_entry_success: #{aec}"]]}
+    #stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
+    stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
+    #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
     #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
   end
 end
@@ -35,7 +38,7 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  include RaftLogLogger
+  #include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
@@ -68,6 +71,7 @@ module RaftLog
     # scratches for follower logic
     scratch :append_entry_valid, [:leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     scratch :append_entry_success, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
+    scratch :uncommitted, log.schema
   end
 
   bootstrap do
@@ -78,13 +82,16 @@ module RaftLog
   # when log entries are committed, they can be applied to the state machine
   bloom :apply_committed_to_state_machine do
     # find entries ready to commit that have not yet been committed
-    to_commit <= (committed_entries * log).outer(:term => :term, :index => :index) do |ce, l|
-      l if ce == [nil, nil] and l.index <= max_index_comitted.reveal
+    uncommitted <= log.notin(committed_entries, :term => :term, :index => :index)
+    to_commit <= uncommitted do |u|
+      u if u.index <= max_index_committed.reveal and u.index >= 0
     end
 
     # commit them
     committed_entries <+ to_commit {|tc| [tc.term, tc.index]}
-    sm.execute_command <= to_commit {|tc| [tc.index, tc.entry["command"]]}
+    sm.execute_command <= to_commit do |tc| 
+      [tc.index, tc.entry["command"]]
+    end
   end
 
   # LEADER RULES
@@ -113,9 +120,9 @@ module RaftLog
     # the leader appends the command to its log as a new entry
     new_entries <= (execute_command * current_term * highest_log_entry).combos do |ec, ct, hle|
       [ct.term, hle.index + 1, {
-         "reqid" => ec.reqid,
-         "command" => ec.command
-       }]
+        "reqid" => ec.reqid,
+        "command" => ec.command
+      }]
     end
 
     active_commands <= new_entries {|ne| [ne.entry["reqid"], ne.index, ne.entry["command"]]}
@@ -135,13 +142,13 @@ module RaftLog
       if prev_entry.index == ni.next_index - 1 and cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
         [ni.client_id, ip_port, cur_entry.entry["reqid"], {
-           "term" => currterm.term,
-           "leader_id" => ip_port, # still unused
-           "prev_log_index" => prev_entry.index,
-           "prev_log_term" => prev_entry.term,
-           "entry" => cur_entry.entry,
-           "commit_index" => max_index_committed
-         }]
+          "term" => currterm.term,
+          "leader_id" => ip_port, # still unused
+          "prev_log_index" => prev_entry.index,
+          "prev_log_term" => prev_entry.term,
+          "entry" => cur_entry.entry,
+          "commit_index" => max_index_committed
+        }]
       end
     end
   end
@@ -150,10 +157,12 @@ module RaftLog
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
     # previous one
     next_indices <+- (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
-      if aer.payload["success"]
-        [ni.client_id, ni.next_index + 1]
-      else
-        [ni.client_id, ni.next_index - 1]
+      if aer.payload["log_index"] == ni.next_index
+        if aer.payload["success"]
+          [ni.client_id, ni.next_index + 1]
+        else
+          [ni.client_id, ni.next_index - 1]
+        end
       end
     end
 
@@ -169,6 +178,7 @@ module RaftLog
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
     max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
+      #puts "THIS COMMAND IS BEING COMMITED #{command}"
       Bud::MaxLattice.new(command.log_index)
     end
   end
@@ -216,7 +226,7 @@ module RaftLog
     end
 
     append_entry_success <= (log * append_entry_valid)
-      .pairs(:index => :prev_log_index, :term => :prev_log_term) do |entry, append_req|
+    .pairs(:index => :prev_log_index, :term => :prev_log_term) do |entry, append_req|
       [
         append_req.leader_id,
         append_req.entry,
@@ -247,9 +257,10 @@ module RaftLog
     # send response back to leader
     rd.pipe_in <= (append_entry_success * current_term).pairs do |as, currterm|
       [as.leader_id, ip_port, as.entry["reqid"], {
-         "term" => currterm.term,
-         "success" => as.success
-       }]
+        "term" => currterm.term,
+        "success" => as.success,
+        "log_index" => as.prev_index
+      }]
     end
   end
 end
