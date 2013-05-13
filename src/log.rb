@@ -9,7 +9,7 @@ require '../src/orderedstatemachine'
 module StronglyConsistentDistributedStateMachineProto
   state do
     interface input, :execute_command, [:reqid] => [:command]
-    interface output, :execute_command_resp [:reqid] => [:command, :new_state]
+    interface output, :execute_command_resp, [:reqid] => [:command, :new_state]
   end
 end
 
@@ -30,7 +30,7 @@ module RaftLog
     # entries to the log that have been committed
     table :committed_entries, [:term, :index] => []
 
-    table :active_commands [:reqid] => [:log_index, :command]
+    table :active_commands, [:reqid] => [:log_index, :command]
 
     # the index of the highest log entry committed so far
     lmax :max_index_committed
@@ -115,7 +115,7 @@ module RaftLog
   bloom :start_append_entries do
     # this is extremely inefficient (must compute the cross product of all log entries
     # but I'm not sure there is a better way to do this in Bloom
-    rd.pipe_in <~ (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
+    rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.index - 1 and cur_entry.index == ni.index
         # payload is the actual AppendEntriesRPC
         [ni.client_id, ip_port, cur_entry[:reqid], {
@@ -142,7 +142,7 @@ module RaftLog
     end
 
     # count up the successful votes so we can commit
-    vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:client_id => :client_id) do |aer, ni|
+    vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
       [ni.client_id, aer.ident] if aer.payload[:success]
     end
@@ -150,14 +150,14 @@ module RaftLog
 
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
-    max_index_comitted <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
+    max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
       command.index
     end
   end
 
   bloom :respond_to_client do
-    finished_commands <= (active_commands * sm.execute_command_resp).pairs(:log_index => :reqid) do |ac, ecr|
-      [ac.reqid, ecr.reqid, ac.command, ecr.new_state]
+    finished_commands <= (active_commands * sm.execute_command_resp).pairs(:log_index => :command_index) do |ac, ecr|
+      [ac.reqid, ecr.command_index, ac.command, ecr.new_state]
     end
     # remove finished commands from active_commands
     active_commands <- finished_commands {|ecr| [fc.reqid, fc.log_index, fc.command]}
@@ -192,7 +192,7 @@ module RaftLog
     end
 
     append_entry_success <= (log * append_entry_current)
-      .outer(:index => :pre_log_index, :term => :prev_log_term) do |entry, append_req|
+      .outer(:index => :prev_log_index, :term => :prev_log_term) do |entry, append_req|
       # if we get an appendEntriesRPC from a false leader, ignore it
       if entry != [nil, nil, nil]
         # if we have a matching previous entry, we can append this log entry
@@ -217,7 +217,7 @@ module RaftLog
     max_index_committed <= append_entry_success {|as| [as.commit_index]}
 
     # send response back to leader
-    rd.pipe_in <~ (append_entry_success * current_term).pairs do |as, currterm|
+    rd.pipe_in <= (append_entry_success * current_term).pairs do |as, currterm|
       [as.leader_id, ip_port, as.entry[:reqid], {
          :term => currterm.term,
          :success => as.success
