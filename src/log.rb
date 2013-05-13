@@ -239,13 +239,8 @@ module RaftLog
     append_entry_buffer <+ append_entry_failure
 
     # delete any conflicting entries
-<<<<<<< HEAD
     log <- (log * append_entry_buffer).pairs do |entry, as|
-      entry if entry.index > as.prev_index or entry.term > as.prev_term
-=======
-    log <- (log * append_entry_success).pairs do |entry, as|
       entry if entry.index > as.prev_index || entry.term > as.prev_term
->>>>>>> 2770379f5cbd0c452bf12167700d10f3be84c403
     end
 
     # add new entry
