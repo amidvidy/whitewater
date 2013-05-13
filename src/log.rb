@@ -20,7 +20,7 @@ module RaftLogLogger
     #stdio <~ current_role {|cr| ["server #{ip_port}-@#{budtime}: current_role #{cr}"]}
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     #stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
-    stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
+    #stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
     #stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
     #stdio <~ to_commit {|tc| [["server #{ip_port}-@#{budtime}: to_commit #{tc}}"]]}
     #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
@@ -29,14 +29,14 @@ module RaftLogLogger
     #stdio <~ untracked_members {|l| [["server #{ip_port}-@#{budtime}: untracked_members #{l}"]]}
     #stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
     #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
-    #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
+    stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
   end
 end
 
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  include RaftLogLogger
+  #include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
@@ -238,8 +238,11 @@ module RaftLog
     end
 
      #send failure responses
-    temp :append_entry_failure <= append_entry_valid.notin(append_entry_buffer, :entry => :entry, :prev_log_term => :prev_term)
-    append_entry_buffer <+ append_entry_failure
+    temp :append_entry_failure <= append_entry_valid.notin(append_entry_buffer, :entry => :entry, :prev_log_term => :prev_term) 
+
+    append_entry_buffer <+ append_entry_failure do |aef| 
+      [aef.leader_id, aef.entry, aef.prev_term, aef.prev_index, aef.commit_index, false]
+    end
 
     # delete any conflicting entries
     log <- (log * append_entry_buffer).pairs do |entry, as|

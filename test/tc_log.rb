@@ -75,7 +75,7 @@ class TestLog < Test::Unit::TestCase
     assert_equal [[1, ["DIV", 2], 5]], @s1.sync_callback(:execute_command, [[1, ["DIV", 2]]], :execute_command_resp)
     assert_equal [[2, ["SUB", 3], 2]], @s1.sync_callback(:execute_command, [[2, ["SUB", 3]]], :execute_command_resp)
     @s2.start
-    1.times {@replicas.map(&:tick)}
+    200.times {@replicas.map(&:tick)}
     assert_equal @s1.delta(:log), @s2.delta(:log)
   end
 
