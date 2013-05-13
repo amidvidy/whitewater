@@ -21,7 +21,7 @@ end
 module RaftLogLogger
   bloom :log_to_stdio do
     #stdio <~ current_role {|cr| ["server #{ip_port}-@#{budtime}: current_role #{cr}"]}
-    #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
+    stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
     stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
     stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
@@ -29,6 +29,7 @@ module RaftLogLogger
     #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
     #stdio <~ append_entry_success {|aec| [["server #{ip_port}-@#{budtime} append_entry_success: #{aec}"]]}
     #stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
+    stdio <~ untracked_members {|l| [["server #{ip_port}-@#{budtime}: untracked_members #{l}"]]}
     stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
     #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
     #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
@@ -89,7 +90,7 @@ module RaftLog
 
     # commit them
     committed_entries <+ to_commit {|tc| [tc.term, tc.index]}
-    sm.execute_command <= to_commit do |tc| 
+    sm.execute_command <= to_commit do |tc|
       [tc.index, tc.entry["command"]]
     end
   end
@@ -103,11 +104,11 @@ module RaftLog
     highest_log_entry <= log.argmax([], :index)
 
     # figure out which members have uninitialized next_index entries
-    tracked_members <= next_indices {|ni| [ni.client_id]}
-    temp :untracked <= current_members.notin(tracked_members)
-    untracked_members <= untracked do |ut|
+    #tracked_members <= next_indices {|ni| [ni.client_id]}
+    temp :untracked <= current_members.notin(next_indices, :host => :client_id)
+    untracked_members <= (untracked * current_role).pairs do |ut, curr_role|
       # someone is untracked if they are not this node and not currently tracked
-      ut if ut.host != ip_port
+      ut if ut.host != ip_port and curr_role.role == :LEADER
     end
 
     # leader initializes next_index values
@@ -157,6 +158,7 @@ module RaftLog
     # if a follower successfully acked this log entry, send it the next one, otherwise, send it the
     # previous one
     next_indices <+- (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
+      #puts "AJFHJKSEHLKRH SHIT SHIT SHIT #{aer} AND NEXT INDEX #{ni.next_index}"
       if aer.payload["log_index"] == ni.next_index
         if aer.payload["success"]
           [ni.client_id, ni.next_index + 1]
@@ -259,7 +261,7 @@ module RaftLog
       [as.leader_id, ip_port, as.entry["reqid"], {
         "term" => currterm.term,
         "success" => as.success,
-        "log_index" => as.prev_index
+        "log_index" => as.prev_index + 1
       }]
     end
   end

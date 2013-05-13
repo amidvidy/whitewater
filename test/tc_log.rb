@@ -31,6 +31,13 @@ class TestLog < Test::Unit::TestCase
     resp = @s1.sync_callback(:execute_command, [[0, ["SET", 10]]], :execute_command_resp)
     assert_equal [[0, ["SET", 10], 10]], resp
   end
+
+  def test_simple
+    assert_equal [[0, ["ADD", 10], 10]], @s1.sync_callback(:execute_command, [[0, ["ADD", 10]]], :execute_command_resp)
+    assert_equal [[1, ["DIV", 2], 5]], @s1.sync_callback(:execute_command, [[1, ["DIV", 2]]], :execute_command_resp)
+    assert_equal [[2, ["SUB", 3], 2]], @s1.sync_callback(:execute_command, [[2, ["SUB", 3]]], :execute_command_resp)
+  end
+
 end
 
 class Log
