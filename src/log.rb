@@ -17,9 +17,18 @@ end
 #   - automatically send heartbeats
 #   - handle server status changes
 
+# so meta
+module RaftLogLogger
+  bloom :log_to_stdio do
+    stdio <~ execute_command {|ec| [["@#{budtime}: execute_command: #{ec}"]]}
+  end
+end
+
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
+  include RaftLogLogger
+
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
   import OrderedStateMachine => :sm
@@ -54,8 +63,9 @@ module RaftLog
   end
 
   bootstrap do
+    puts "foo"
     # log needs dummy entry
-    log <= [[-1, -1, nil]]
+    log <= [[-1, -1, "wdeawdawdawdioj"]]
   end
 
   # when log entries are committed, they can be applied to the state machine
@@ -193,13 +203,16 @@ module RaftLog
 
     append_entry_success <= (log * append_entry_current)
       .outer(:index => :prev_log_index, :term => :prev_log_term) do |entry, append_req|
-      # if we get an appendEntriesRPC from a false leader, ignore it
-      if entry != [nil, nil, nil]
-        # if we have a matching previous entry, we can append this log entry
-        [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, true]
-      else
-        # we don't have a matching previous entry, leader will try again with an earlier entry
-        [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, false]
+      # kind of a kludge, but this line has the effect of ensuring that this code is
+      # only executed by followers
+      if append_req != [nil, nil, nil, nil, nil, nil]
+        if entry != [nil, nil, nil]
+          # if we have a matching previous entry, we can append this log entry
+          [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, true]
+        else
+          # we don't have a matching previous entry, leader will try again with an earlier entry
+          [append_req.leader_id, append_req.entry, append_req.prev_log_term, append_req.prev_log_index, false]
+        end
       end
     end
 
