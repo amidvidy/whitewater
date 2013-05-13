@@ -118,13 +118,13 @@ module RaftLog
        }]
     end
 
-    active_commands <= new_entries {|ne| [ne.entry["reqid"], ne.index, ne.entry[:command]]}
+    active_commands <= new_entries {|ne| [ne.entry["reqid"], ne.index, ne.entry["command"]]}
 
     # add new entries to log
     log <+ new_entries
 
     # start counting acks for this command
-    vc.start_vote <= new_entries {|ne| [[ne.entry["reqid"]], (members.length / 2) + 1]}
+    vc.start_vote <= new_entries {|ne| [ne.entry["reqid"], (members.length / 2) + 1]}
   end
 
   # leader sends out and appendEntriesRPC for all out-of-sync followers on each tick
@@ -134,7 +134,7 @@ module RaftLog
     rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.next_index - 1 and cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
-        [ni.client_id, ip_port, cur_entry.entry[:reqid], {
+        [ni.client_id, ip_port, cur_entry.entry["reqid"], {
            "term" => currterm.term,
            "leader_id" => ip_port, # still unused
            "prev_log_index" => prev_entry.index,
@@ -162,7 +162,6 @@ module RaftLog
     # count up the successful votes so we can commit
     vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
-      puts "PRINTING IN SUBMIT BALLOT #{aer}"
       [ni.client_id, aer.ident] if aer.payload["success"]
     end
   end
@@ -170,7 +169,6 @@ module RaftLog
   bloom :commit do
     # a command can be committed when a majority of followers have appended it to their logs
     max_index_committed <= (vc.outcome * active_commands).rights(:prop => :reqid) do |command|
-      puts "AT #{__LINE__} AND #{command.index}"
       Bud::MaxLattice.new(command.index)
     end
   end
@@ -199,7 +197,6 @@ module RaftLog
   bloom :handle_append_entries do
     # update term if the requestors term is higher than ours, lattice logic handles the details
     update_term <+ rd.pipe_out do |req| 
-      puts "UPDATE TERM #{req}"
       [req.payload["term"]]
     end
     # these are the RPCs that are not from a deposed leader (term < current_term)
@@ -243,7 +240,6 @@ module RaftLog
 
     # update the max entry that we can commit
     max_index_committed <= append_entry_success do |as|
-      puts "AT #{__LINE__} AND #{as.commit_index}"
       Bud::MaxLattice.new(as.commit_index)
     end
 
