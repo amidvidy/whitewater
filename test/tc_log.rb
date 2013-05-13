@@ -12,12 +12,12 @@ class TestLog < Test::Unit::TestCase
     @replicas.map(&:run_bg)
     @s1, @s2, @s3, @s4, @s5 = @replicas
 
-    @s1.update_role <= [[:LEADER]]
+    @s1.update_role <+ [[:LEADER]]
 
-    @s2.update_role <= [[:FOLLOWER]]
-    @s3.update_role <= [[:FOLLOWER]]
-    @s4.update_role <= [[:FOLLOWER]]
-    @s5.update_role <= [[:FOLLOWER]]
+    @s2.update_role <+ [[:FOLLOWER]]
+    @s3.update_role <+ [[:FOLLOWER]]
+    @s4.update_role <+ [[:FOLLOWER]]
+    @s5.update_role <+ [[:FOLLOWER]]
   end
 
   def teardown
