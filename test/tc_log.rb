@@ -75,10 +75,20 @@ class TestLog < Test::Unit::TestCase
     assert_equal [[1, ["DIV", 2], 5]], @s1.sync_callback(:execute_command, [[1, ["DIV", 2]]], :execute_command_resp)
     assert_equal [[2, ["SUB", 3], 2]], @s1.sync_callback(:execute_command, [[2, ["SUB", 3]]], :execute_command_resp)
     @s2.start
-    200.times {@replicas.map(&:tick)}
+    20.times {@replicas.map(&:tick)}
     assert_equal @s1.delta(:log), @s2.delta(:log)
   end
 
+  def test_one_dead_server_after_command
+    assert_equal [[0, ["ADD", 10], 10]], @s1.sync_callback(:execute_command, [[0, ["ADD", 10]]], :execute_command_resp)
+    @s3.stop
+    assert_equal [[1, ["DIV", 2], 5]], @s1.sync_callback(:execute_command, [[1, ["DIV", 2]]], :execute_command_resp)
+    assert_equal [[2, ["SUB", 3], 2]], @s1.sync_callback(:execute_command, [[2, ["SUB", 3]]], :execute_command_resp)
+
+    @s3.start
+    20.times {@replicas.map(&:tick)}
+    assert_equal @s1.delta(:log), @s3.delta(:log)
+  end
 
 end
 class Log

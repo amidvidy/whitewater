@@ -20,7 +20,7 @@ module RaftLogLogger
     #stdio <~ current_role {|cr| ["server #{ip_port}-@#{budtime}: current_role #{cr}"]}
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     #stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
-    #stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
+    stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
     #stdio <~ next_indices do |ni| 
     #  [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]] if ni.client_id == "127.0.0.1:54322"
     #end
@@ -36,19 +36,13 @@ module RaftLogLogger
     #stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
     #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
     #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
-    stdio <~ rd.pipe_in do |pi| 
-      [["\033[94mserver #{ip_port}-@#{budtime}: rd.pipe_in #{pi}\033[0m"]] if ip_port == "127.0.0.1:54322"
-    end
-    stdio <~ rd.pipe_out do |po|
-      [["server #{ip_port}-@#{budtime}: rd.pipe_out #{po}"]] if ip_port == "127.0.0.1:54322"
-    end
   end
 end
 
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  #include RaftLogLogger
+  include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
