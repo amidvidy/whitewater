@@ -20,7 +20,10 @@ end
 # so meta
 module RaftLogLogger
   bloom :log_to_stdio do
-    stdio <~ execute_command {|ec| [["@#{budtime}: execute_command: #{ec}"]]}
+    stdio <~ execute_command {|ec| [["server #{ip_port}-@#{budtime}: execute_command: #{ec}"]]}
+    stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
+    stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
+    stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
   end
 end
 
@@ -63,7 +66,6 @@ module RaftLog
   end
 
   bootstrap do
-    puts "foo"
     # log needs dummy entry
     log <= [[-1, -1, "wdeawdawdawdioj"]]
   end
