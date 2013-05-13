@@ -17,7 +17,7 @@ end
 #   - automatically send heartbeats
 #   - handle server status changes
 
-# so meta
+# yo, so I heard you like logging...
 module RaftLogLogger
   bloom :log_to_stdio do
     stdio <~ execute_command {|ec| [["server #{ip_port}-@#{budtime}: execute_command: #{ec}"]]}
