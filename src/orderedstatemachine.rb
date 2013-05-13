@@ -35,7 +35,7 @@ module OrderedStateMachine
   bloom :execute_ordered do
     # A command is ready if its index is the current index to execute
     ready <= uncommitted do |u|
-      u if current_index.reveal == u.command_index and current_index.reveal == current_index_acked.reveal
+      u if current_index.reveal == u.command_index && current_index.reveal == current_index_acked.reveal
     end
 
     # Update the current index
