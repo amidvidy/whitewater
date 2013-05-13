@@ -14,7 +14,7 @@ module ReliableDelivery
   end
 
   bloom :remember do
-    buf <= pipe_in
+    buf <+ pipe_in.notin(buf, :ident => :ident, :src => :src)
     bed.pipe_in <= pipe_in
     bed.pipe_in <= (buf * clock).lefts
   end

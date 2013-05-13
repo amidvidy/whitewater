@@ -21,15 +21,27 @@ module RaftLogLogger
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     #stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
     #stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
+    #stdio <~ next_indices do |ni| 
+    #  [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]] if ni.client_id == "127.0.0.1:54322"
+    #end
     #stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
     #stdio <~ to_commit {|tc| [["server #{ip_port}-@#{budtime}: to_commit #{tc}}"]]}
     #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
     #stdio <~ append_entry_buffer {|aec| [["server #{ip_port}-@#{budtime} append_entry_buffer: #{aec}"]]}
     #stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
+    #stdio <~ log do |l| 
+    #  [["server #{ip_port}-@#{budtime}: log #{l}"]] if ip_port == "127.0.0.1:54322"
+    #end
     #stdio <~ untracked_members {|l| [["server #{ip_port}-@#{budtime}: untracked_members #{l}"]]}
     #stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
     #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
-    stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
+    #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
+    stdio <~ rd.pipe_in do |pi| 
+      [["\033[94mserver #{ip_port}-@#{budtime}: rd.pipe_in #{pi}\033[0m"]] if ip_port == "127.0.0.1:54322"
+    end
+    stdio <~ rd.pipe_out do |po|
+      [["server #{ip_port}-@#{budtime}: rd.pipe_out #{po}"]] if ip_port == "127.0.0.1:54322"
+    end
   end
 end
 
@@ -142,7 +154,7 @@ module RaftLog
     rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.next_index - 1 && cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
-        [ni.client_id, ip_port, {"reqid"=>cur_entry.entry["reqid"], "nonce"=>rand}, {
+        [ni.client_id, ip_port, cur_entry.entry["reqid"], {
           "term" => currterm.term,
           "leader_id" => ip_port, # still unused
           "prev_log_index" => prev_entry.index,
@@ -173,7 +185,7 @@ module RaftLog
     # count up the successful votes so we can commit
     vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
-      [ni.client_id, aer.ident["reqid"]] if aer.payload["success"]
+      [ni.client_id, aer.ident] if aer.payload["success"]
     end
   end
 
@@ -261,7 +273,7 @@ module RaftLog
 
     # send response back to leader
     rd.pipe_in <= (append_entry_buffer * current_term).pairs do |as, currterm|
-      [as.leader_id, ip_port, {"reqid"=>as.entry["reqid"], "nonce"=>rand}, {
+      [as.leader_id, ip_port, as.entry["reqid"], {
         "term" => currterm.term,
         "success" => as.success,
         "log_index" => as.prev_index + 1
