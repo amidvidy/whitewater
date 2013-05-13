@@ -20,7 +20,7 @@ module RaftLogLogger
     #stdio <~ current_role {|cr| ["server #{ip_port}-@#{budtime}: current_role #{cr}"]}
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     #stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
-    #stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
+    stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
     #stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
     #stdio <~ to_commit {|tc| [["server #{ip_port}-@#{budtime}: to_commit #{tc}}"]]}
     #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
@@ -28,7 +28,7 @@ module RaftLogLogger
     #stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
     #stdio <~ untracked_members {|l| [["server #{ip_port}-@#{budtime}: untracked_members #{l}"]]}
     #stdio <~ active_commands {|ac| [["server #{ip_port}-@#{budtime}: active_commands #{ac}"]]}
-    stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
+    #stdio <~ vc.submit_ballot {|vc| [["server #{ip_port}-@#{budtime}: vc.submit_ballot #{vc}"]]}
     #stdio <~ rd.pipe_in {|pi| [["server #{ip_port}-@#{budtime}: rd.pipe_in #{pi}"]]}
   end
 end
@@ -36,7 +36,7 @@ end
 module RaftLog
   include StronglyConsistentDistributedStateMachineProto
   include ServerStateImpl
-  #include RaftLogLogger
+  include RaftLogLogger
 
   import ReliableDelivery => :rd
   import VoteCounterImpl => :vc
@@ -70,6 +70,9 @@ module RaftLog
     scratch :append_entry_valid, [:leader_id, :term, :prev_log_index, :prev_log_term, :entry, :commit_index]
     scratch :append_entry_buffer, [:leader_id, :entry, :prev_term, :prev_index, :commit_index, :success]
     scratch :uncommitted, log.schema
+
+    # appendEntriesRPC heartbeat
+    periodic :heartbeat, 0.2
   end
 
   bootstrap do
@@ -110,7 +113,7 @@ module RaftLog
 
     # leader initializes next_index values
     next_indices <= (current_role * untracked_members * highest_log_entry).combos do |cr, um, hle|
-      [um.client_id, hle.index] if cr.role == :LEADER && hle.index >= 0
+      [um.client_id, hle.index + 1] if cr.role == :LEADER
     end
   end
 
@@ -139,7 +142,7 @@ module RaftLog
     rd.pipe_in <= (next_indices * log * log * current_term).combos do |ni, cur_entry, prev_entry, currterm|
       if prev_entry.index == ni.next_index - 1 && cur_entry.index == ni.next_index
         # payload is the actual AppendEntriesRPC
-        [ni.client_id, ip_port, cur_entry.entry["reqid"], {
+        [ni.client_id, ip_port, {"reqid"=>cur_entry.entry["reqid"], "nonce"=>rand}, {
           "term" => currterm.term,
           "leader_id" => ip_port, # still unused
           "prev_log_index" => prev_entry.index,
@@ -170,8 +173,7 @@ module RaftLog
     # count up the successful votes so we can commit
     vc.submit_ballot <= (rd.pipe_out * next_indices).pairs(:src => :client_id) do |aer, ni|
       # aer.ident is the reqid
-      puts "PRINTING OUT THE AER #{aer}"
-      [ni.client_id, aer.ident] if aer.payload["success"]
+      [ni.client_id, aer.ident["reqid"]] if aer.payload["success"]
     end
   end
 
@@ -256,7 +258,7 @@ module RaftLog
 
     # send response back to leader
     rd.pipe_in <= (append_entry_buffer * current_term).pairs do |as, currterm|
-      [as.leader_id, ip_port, as.entry["reqid"], {
+      [as.leader_id, ip_port, {"reqid"=>as.entry["reqid"], "nonce"=>rand}, {
         "term" => currterm.term,
         "success" => as.success,
         "log_index" => as.prev_index + 1

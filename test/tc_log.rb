@@ -17,6 +17,8 @@ class TestLog < Test::Unit::TestCase
     @s3.update_role <+ [[:FOLLOWER]]
     @s4.update_role <+ [[:FOLLOWER]]
     @s5.update_role <+ [[:FOLLOWER]]
+
+    @replicas.map(&:tick)
   end
 
   def teardown
@@ -73,7 +75,7 @@ class TestLog < Test::Unit::TestCase
     assert_equal [[1, ["DIV", 2], 5]], @s1.sync_callback(:execute_command, [[1, ["DIV", 2]]], :execute_command_resp)
     assert_equal [[2, ["SUB", 3], 2]], @s1.sync_callback(:execute_command, [[2, ["SUB", 3]]], :execute_command_resp)
     @s2.start
-    20.times {@replicas.map(&:tick)}
+    1.times {@replicas.map(&:tick)}
     assert_equal @s1.delta(:log), @s2.delta(:log)
   end
 
