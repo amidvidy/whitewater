@@ -10,11 +10,14 @@ For the purpose of test driving the log replication module, we have also
 implemented an ordered, consistent, and distributed simple calculator
 (lol).
 
-## Docs
+## Module Documentation
 
-Election: <https://github.com/amidvidy/whitewater/blob/master/docs/election.md>
+[Election](https://github.com/amidvidy/whitewater/blob/master/docs/election.md)
 
-Server State: <https://github.com/amidvidy/whitewater/blob/master/docs/serverstate.md>
+[Server State](https://github.com/amidvidy/whitewater/blob/master/docs/serverstate.md)
 
-Timeout: <https://github.com/amidvidy/whitewater/blob/master/docs/timeout.md>
+[Timeout](https://github.com/amidvidy/whitewater/blob/master/docs/timeout.md)
 
+[Log](https://github.com/amidvidy/whitewater/blob/master/docs/log.md)
+
+[Ordered State Machine](https://github.com/amidvidy/whitewater/blob/master/docs/orderedstatemachine.md)
