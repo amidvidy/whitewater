@@ -7,8 +7,9 @@ We have implemented Leader Election and Log Replication as two separate
 modules.
 
 For the purpose of test driving the log replication module, we have also
-implemented an ordered, consistent, and distributed simple calculator
-(lol).
+implemented an ordered, consistent, and distributed simple calculator.
+
+This was made as a final project for Joe Hellerstein and Peter Alvaro's Programming the Cloud course at UC Berkeley.
 
 ## Module Documentation
 
