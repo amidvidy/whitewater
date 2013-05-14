@@ -253,12 +253,12 @@ module RaftLog
 
     # delete any conflicting entries
     log <- (log * append_entry_buffer).pairs do |entry, as|
-      entry if entry.index > as.prev_index || entry.term > as.prev_term
+      entry if as.success && (entry.index > as.prev_index || entry.term > as.prev_term)
     end
 
     # add new entry
     log <+ (append_entry_buffer * current_term).pairs do |as, currterm|
-      [currterm.term, as.prev_index + 1, as.entry]
+      [currterm.term, as.prev_index + 1, as.entry] if as.success
     end
 
     # update the max entry that we can commit
