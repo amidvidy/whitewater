@@ -22,8 +22,6 @@ implemented an ordered, consistent, and distributed simple calculator
 
 [Ordered State Machine](https://github.com/amidvidy/whitewater/blob/master/docs/orderedstatemachine.md)
 
-## References
-
 [1]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf  "Ongaro, D., and Ousterhout, J. In Search of an Understandable Consensus Algorithm"
 [2]: http://www.bloom-lang.net/ "Bloom"
 
