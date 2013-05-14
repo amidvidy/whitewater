@@ -21,7 +21,7 @@ module RaftLogLogger
     #stdio <~ highest_log_entry {|hle| [["server #{ip_port}-@#{budtime}: highest_log_entry #{hle}"]]}
     #stdio <~ sm.execute_command {|ec| [["server #{ip_port}-@#{budtime}: sm.execute_command #{ec}"]]}
     stdio <~ next_indices {|ni| [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]]}
-    #stdio <~ next_indices do |ni| 
+    #stdio <~ next_indices do |ni|
     #  [["server #{ip_port}-@#{budtime}: next_indices #{ni}"]] if ni.client_id == "127.0.0.1:54322"
     #end
     #stdio <~ new_entries {|ne| [["server #{ip_port}-@#{budtime}: new_entries #{ne}}"]]}
@@ -29,7 +29,7 @@ module RaftLogLogger
     #stdio <~ append_entry_valid {|aec| [["server #{ip_port}-@#{budtime} append_entry_valid: #{aec}"]]}
     #stdio <~ append_entry_buffer {|aec| [["server #{ip_port}-@#{budtime} append_entry_buffer: #{aec}"]]}
     #stdio <~ log {|l| [["server #{ip_port}-@#{budtime}: log #{l}"]]}
-    #stdio <~ log do |l| 
+    #stdio <~ log do |l|
     #  [["server #{ip_port}-@#{budtime}: log #{l}"]] if ip_port == "127.0.0.1:54322"
     #end
     #stdio <~ untracked_members {|l| [["server #{ip_port}-@#{budtime}: untracked_members #{l}"]]}
@@ -70,6 +70,7 @@ module RaftLog
     scratch :highest_log_entry, log.schema
     scratch :tracked_members, [:client_id]
     scratch :untracked_members, [:client_id]
+    scratch :untracked, untracked_members.schema
     scratch :finished_commands, [:reqid] => [:log_index, :command, :new_state]
 
     # scratches for follower logic
@@ -111,10 +112,10 @@ module RaftLog
 
     # figure out which members have uninitialized next_index entries
     #tracked_members <= next_indices {|ni| [ni.client_id]}
-    temp :untracked <= current_members.notin(next_indices, :host => :client_id)
+    untracked <= current_members.notin(next_indices, :host => :client_id)
     untracked_members <= (untracked * current_role).pairs do |ut, curr_role|
       # someone is untracked if they are not this node and not currently tracked
-      ut if ut.host != ip_port && curr_role.role == :LEADER
+      ut if ut.client_id != ip_port && curr_role.role == :LEADER
     end
 
     # leader initializes next_index values
@@ -213,7 +214,7 @@ module RaftLog
 
   bloom :handle_append_entries do
     # update term if the requestors term is higher than ours, lattice logic handles the details
-    update_term <+ rd.pipe_out do |req| 
+    update_term <+ rd.pipe_out do |req|
       [req.payload["term"]]
     end
     # these are the RPCs that are not from a deposed leader (term < current_term)
@@ -244,9 +245,9 @@ module RaftLog
     end
 
      #send failure responses
-    temp :append_entry_failure <= append_entry_valid.notin(append_entry_buffer, :entry => :entry, :prev_log_term => :prev_term) 
+    temp :append_entry_failure <= append_entry_valid.notin(append_entry_buffer, :entry => :entry, :prev_log_term => :prev_term)
 
-    append_entry_buffer <+ append_entry_failure do |aef| 
+    append_entry_buffer <+ append_entry_failure do |aef|
       [aef.leader_id, aef.entry, aef.prev_term, aef.prev_index, aef.commit_index, false]
     end
 
