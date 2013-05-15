@@ -23,6 +23,6 @@ This was made as a final project for Joe Hellerstein and Peter Alvaro's Programm
 
 [Ordered State Machine](https://github.com/amidvidy/whitewater/blob/master/docs/orderedstatemachine.md)
 
-[1]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf  "Ongaro, D., and Ousterhout, J. In Search of an Understandable Consensus Algorithm"
-[2]: http://www.bloom-lang.net/ "Bloom"
+[1: "Ongaro, D., and Ousterhout, J. In Search of an Understandable Consensus Algorithm"](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf)  
+[2: "Bloom"](http://www.bloom-lang.net/)
 
