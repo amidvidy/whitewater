@@ -11,6 +11,10 @@ implemented an ordered, consistent, and distributed simple calculator.
 
 This was made as a final project for Joe Hellerstein and Peter Alvaro's Programming the Cloud course at UC Berkeley.
 
+## Note
+
+This is currently a work in progress. We believe most of the functionality is in place, but there are a few issues that could potentially cause data loss or corruption. Thus in its current state, we do not recommend the use of whitewater in production.
+
 ## Module Documentation
 
 [Election](https://github.com/amidvidy/whitewater/blob/master/docs/election.md)
@@ -25,4 +29,10 @@ This was made as a final project for Joe Hellerstein and Peter Alvaro's Programm
 
 [1]: https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf  "Ongaro, D., and Ousterhout, J. In Search of an Understandable Consensus Algorithm"
 [2]: http://www.bloom-lang.net/ "Bloom"
+
+## Acknowledgements
+
+Thanks to Diego Ongaro for providing guidance on the Raft protocol and for reviewing our code for correctness issues.
+
+Thanks to Peter Alvaro for general guidance and advice on how to best implement configurable timers in Bloom.
 
